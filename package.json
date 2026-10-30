@@ -1,12 +1,11 @@
 {
-  "name": "confusion-aware-tutor-vk18",
+  "name": "confusion-aware-interactive-tutor",
   "version": "1.0.0",
-  "description": "Real-Time Confusion-Aware Interactive Tutor for AFTERHOURS 1.0 Hackathon (Team VK 18, DBIT)",
+  "description": "Real-Time Confusion-Aware Interactive Tutor with Behavioral Telemetry, AI Video Lessons, and Socratic Scaffolding",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "keywords": ["ai-tutor", "telemetry", "human-ai-interaction", "afterhours", "dbit", "aws-bedrock"],
-  "author": "Team VK 18 (Madhu N, Nageshwari BS, Pavan K, Kushal NS)",
+  "keywords": ["ai-tutor", "telemetry", "human-ai-interaction", "adaptive-learning", "aws-bedrock"],
   "license": "MIT"
 }

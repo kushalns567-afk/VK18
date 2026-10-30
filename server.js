@@ -1,7 +1,5 @@
 // ==============================================================================
-// AFTERHOURS 1.0 - CODE BEYOND THE CLOCK
-// AWS Student Builder Group DBIT | Don Bosco Institute of Technology
-// Team VK 18 (AH-52) - Real-Time Confusion-Aware Interactive Tutor
+// Real-Time Confusion-Aware Interactive Tutor Server
 // ==============================================================================
 
 const http = require('http');
@@ -17,6 +15,12 @@ const sessionStore = {
   sessionId: 'sess_' + Date.now(),
   startTime: Date.now(),
   student: 'Learner_Demo',
+  currentUser: null,
+  users: [
+    { id: 'u_1', name: 'Alex Chen', email: 'alex@student.edu', password: 'password123', role: 'Student', avatar: '👨‍💻' },
+    { id: 'u_2', name: 'Dr. Sarah Connor', email: 'sarah@edu.org', password: 'password123', role: 'Educator', avatar: '👩‍🏫' },
+    { id: 'u_3', name: 'Guest Learner', email: 'guest@demo.com', password: 'password123', role: 'Student', avatar: '🚀' }
+  ],
   telemetryLogs: [],
   interventions: [],
   metricsSummary: {
@@ -228,6 +232,94 @@ const server = http.createServer((req, res) => {
         if (body) data = JSON.parse(body);
       } catch (e) {
         // invalid json
+      }
+
+      // 0. User Authentication Endpoints
+      if (pathname === '/api/login' && req.method === 'POST') {
+        const { email, password } = data;
+        const user = sessionStore.users.find(u => (u.email.toLowerCase() === (email || '').toLowerCase() || u.name.toLowerCase() === (email || '').toLowerCase()));
+        
+        if (user && (user.password === password || password === 'demo' || !password)) {
+          sessionStore.currentUser = user;
+          sessionStore.student = user.name;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'success',
+            user: { id: user.id, name: user.name, email: user.email, role: user.role, avatar: user.avatar },
+            token: 'jwt_mock_' + Buffer.from(user.email).toString('base64')
+          }));
+          return;
+        }
+
+        // Generic fallback for any email during demo mode
+        if (email) {
+          const newUser = {
+            id: 'u_' + Date.now(),
+            name: email.split('@')[0],
+            email: email,
+            role: 'Student',
+            avatar: '👨‍🎓'
+          };
+          sessionStore.users.push(newUser);
+          sessionStore.currentUser = newUser;
+          sessionStore.student = newUser.name;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'success',
+            user: newUser,
+            token: 'jwt_mock_' + Date.now()
+          }));
+          return;
+        }
+
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'error', message: 'Invalid credentials. Please enter email.' }));
+        return;
+      }
+
+      if (pathname === '/api/register' && req.method === 'POST') {
+        const { name, email, password, role = 'Student' } = data;
+        if (!email || !name) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'error', message: 'Name and email are required.' }));
+          return;
+        }
+
+        const newUser = {
+          id: 'u_' + Date.now(),
+          name,
+          email,
+          password: password || 'password123',
+          role,
+          avatar: role === 'Educator' ? '👩‍🏫' : '👨‍💻'
+        };
+        sessionStore.users.push(newUser);
+        sessionStore.currentUser = newUser;
+        sessionStore.student = newUser.name;
+
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'success',
+          user: { id: newUser.id, name: newUser.name, email: newUser.email, role: newUser.role, avatar: newUser.avatar },
+          token: 'jwt_mock_' + Buffer.from(newUser.email).toString('base64')
+        }));
+        return;
+      }
+
+      if (pathname === '/api/logout' && req.method === 'POST') {
+        sessionStore.currentUser = null;
+        sessionStore.student = 'Guest';
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success', message: 'Logged out successfully.' }));
+        return;
+      }
+
+      if (pathname === '/api/me' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          user: sessionStore.currentUser
+        }));
+        return;
       }
 
       // 1. Telemetry ingestion
@@ -483,7 +575,7 @@ const server = http.createServer((req, res) => {
       // 5. Health check
       if (pathname === '/api/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ status: 'healthy', project: 'VK18-Confusion-Tutor', version: '1.0.0' }));
+        res.end(JSON.stringify({ status: 'healthy', project: 'Confusion-Aware-Interactive-Tutor', version: '1.0.0' }));
         return;
       }
 
@@ -527,8 +619,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log(`================================================================`);
-  console.log(` AFTERHOURS 1.0 - CODE BEYOND THE CLOCK (DBIT)`);
-  console.log(` Team VK 18 (AH-52): Real-Time Confusion-Aware Interactive Tutor`);
+  console.log(` Real-Time Confusion-Aware Interactive Tutor`);
   console.log(` Server active at: http://localhost:${PORT}`);
   console.log(`================================================================`);
 });

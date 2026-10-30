@@ -1,31 +1,22 @@
 # Real-Time Confusion-Aware Interactive Tutor 🚀
 
-**Hackathon:** AFTERHOURS 1.0 — Code Beyond the Clock  
-**Organizers:** AWS Student Builder Group DBIT • Don Bosco Institute of Technology, Bengaluru  
-**Theme 06:** Computational Creativity & Human-AI Interaction  
-**Team Name:** VK 18  
-**Team ID:** AH-52  
-**Team Members:**
-- **Madhu N**
-- **Nageshwari BS**
-- **Pavan K**
-- **Kushal NS**
+An adaptive, privacy-preserving coding and STEM learning platform with real-time behavioral telemetry, interactive AI video tutoring, interleaved conceptual diagnostics, and dynamic Socratic scaffolding.
 
 ---
 
-## 🌟 Overview & Problem Statement (Slide 2 & 3)
+## 🌟 Overview & Problem Statement
 
-Current e-learning platforms for programming and STEM present rigid, static content that cannot sense learner struggle in real time. Students enter silent cognitive overload, repeatedly deleting code or staring in paralysis, only to fail assessments or abandon courses (80%+ drop-out rate).
+Current e-learning platforms for programming and STEM present rigid, static content that cannot sense learner struggle in real time. Students enter silent cognitive overload, repeatedly deleting code or staring in paralysis, only to fail assessments or abandon courses.
 
 ### The Solution:
-A **privacy-preserving, telemetry-instrumented workspace** that calculates real-time **Cognitive Friction (0–100%)** from typing cadence, burst deletions, idle dwell, and error loops. When unproductive struggle is diagnosed with sub-300ms latency, the **Socratic AI Tutor** intervenes dynamically with **relatable visual analogies** (Theme 06: Computational Creativity).
+A **privacy-preserving, telemetry-instrumented workspace** that calculates real-time **Cognitive Friction (0–100%)** from typing cadence, burst deletions, idle dwell, and error loops. When unproductive struggle is diagnosed with sub-300ms latency, the **Socratic AI Tutor** intervenes dynamically with **relatable visual analogies** and adaptive micro-lessons.
 
 ---
 
-## 🏗️ Architecture & Data Flow (Slide 4)
+## 🏗️ Architecture & Data Flow
 
 ```
-[React Web IDE / Canvas] 
+[Web IDE / Canvas] 
        │ (Keystroke & Dwell Telemetry Stream)
        ▼
 [Confusion Diagnostic Engine]
@@ -38,13 +29,13 @@ A **privacy-preserving, telemetry-instrumented workspace** that calculates real-
 ```
 
 ### Tech Stack:
-- **Frontend:** React, Tailwind CSS, Custom Monaco-Style Telemetry Editor, Canvas Sparkline HUD.
-- **Backend & Cloud:** Node.js, REST API endpoints (`/api/telemetry`, `/api/diagnose`, `/api/bedrock-tutor`, `/api/session-analytics`), AWS Bedrock architecture.
+- **Frontend:** React architecture, Tailwind CSS, Custom Monaco-Style Telemetry Editor, Canvas Sparkline HUD.
+- **Backend & Cloud:** Node.js, REST API endpoints (`/api/telemetry`, `/api/diagnose`, `/api/bedrock-tutor`, `/api/analyze-understanding`, `/api/adaptive-reteach`, `/api/session-analytics`), AWS Bedrock architecture.
 - **Privacy Model:** 100% webcam-free and audio-free; tracks only typing cadence and interaction deltas.
 
 ---
 
-## 🚀 Key Features Implemented (Slide 5)
+## 🚀 Key Features Implemented
 
 1. **Telemetry-Instrumented Workspace:**
    - Real-time typing velocity (WPM).
@@ -66,26 +57,29 @@ A **privacy-preserving, telemetry-instrumented workspace** that calculates real-
      3. *Interactive Sandbox* (clickable step-by-step visual animation).
      4. *Minimal Code Scout* (syntax nudge).
 
-4. **🎥 Interactive Video Tutor & Adaptive Studio (New):**
-   - **Interactive Video Lectures with Speech Narration:** Features animated AI Tutors (Professor Ada & Dr. Turing) with speech synthesis (`window.speechSynthesis`), visual chapter timelines, and synchronized presentation boards.
+4. **🎥 Interactive Video Tutor & Adaptive Studio:**
+   - **Interactive Video Lectures with Speech Narration:** Features animated AI Tutors with speech synthesis (`window.speechSynthesis`), visual chapter timelines, and synchronized presentation boards.
    - **In-Video Checkpoint Questions:** Video automatically pauses at key intervals (e.g. 0:40, 1:15) to ask conceptual questions before proceeding.
    - **Understanding Level Diagnostics:** Evaluates student answers, calculates comprehension scores (0–100%), and classifies mastery tiers (`MASTERY`, `DEVELOPING`, `STRUGGLING`).
    - **Targeted Adaptive Re-Teaching:** Automatically identifies the exact concept or edge-case the student failed to understand (e.g., Base Case omission, stack unwinding, pointer shift inversion) and launches a customized micro-lesson with visual explanations and audio narration to re-teach that exact blindspot.
-   - **Direct IDE Integration:** Once re-taught, the student can click "Apply & Solve in IDE" to put their new mental model into practice immediately!
+   - **Direct IDE Integration:** Once re-taught, the student can click "Apply & Solve in IDE" to put their new mental model into practice immediately.
 
 5. **Live Telemetry & Learning Heatmap Dashboard:**
    - Live Canvas sparkline plotting friction over time.
    - Line-by-line struggle hotspot heatmap.
    - Session telemetry log and cognitive load distribution.
 
-5. **Pitch Deck Presentation Viewer (Slides 1–5):**
-   - Exact recreation of all 5 hackathon presentation slides built directly into the web app for judging convenience.
-
-6. **Fast Judge Demo Bar:**
+6. **Live Telemetry Simulator Bar:**
    - `💥 Burst Deletions`: Simulates rapid backspacing.
    - `❄️ 45s Cognitive Freeze`: Simulates paralysis on recursion logic.
    - `🔁 Execution Error Loop`: Simulates rapid runtime failures.
    - `🟢 Reset to Flow`: Restores calm state.
+
+7. **🔐 Authentication & User Profile Management:**
+   - Dedicated login/registration portal with cyber dark styling and platform feature showcase.
+   - Supports Sign In, Account Creation, and session persistence in `localStorage`.
+   - **⚡ 1-Click Instant Demo Profiles**: Effortless instant access with pre-configured student (`Alex Chen`), educator (`Dr. Sarah`), and guest accounts.
+   - Header user pill displaying active avatar, name, role badge, and 1-click Sign Out.
 
 ---
 
@@ -103,4 +97,3 @@ Open your browser to: **`http://localhost:3000`**
 
 ### Option 3: Instant Static / Offline Mode
 You can directly open `public/index.html` in any web browser (Google Chrome, Microsoft Edge, Firefox, Brave) without even needing an active server or internet connection.
-

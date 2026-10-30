@@ -1,12 +1,12 @@
 // ==============================================================================
 // APPLICATION CORE CONTROLLER
-// Real-Time Confusion-Aware Interactive Tutor (Team VK 18)
+// Real-Time Confusion-Aware Interactive Tutor
 // ==============================================================================
 
 document.addEventListener('DOMContentLoaded', () => {
   // Application State
   const state = {
-    activeTab: 'workspace', // 'workspace', 'analytics', 'creativity', 'deck', 'architecture'
+    activeTab: 'login', // Default screen is 'login' until authenticated
     currentChallengeIndex: 0,
     currentCode: '',
     executionOutput: '',
@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
       recentErrors: 0,
       currentLine: 1
     },
-    deckSlideIndex: 0 // 0 to 4
+    currentUser: null
   };
 
   // Initialize Metaphor Visualizer Engine
@@ -493,8 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
       workspace: document.getElementById('view-workspace'),
       video: document.getElementById('view-video'),
       analytics: document.getElementById('view-analytics'),
-      creativity: document.getElementById('view-creativity'),
-      deck: document.getElementById('view-deck')
+      login: document.getElementById('view-login')
     };
 
     Object.keys(views).forEach(k => {
@@ -505,14 +504,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    if (tabId === 'deck') {
-      renderSlide(state.deckSlideIndex);
-    } else if (tabId === 'video') {
+    if (tabId === 'video') {
       videoTutor.render();
     } else if (tabId === 'analytics') {
       renderAnalyticsView();
-    } else if (tabId === 'creativity') {
-      renderCreativityLab();
     }
   }
 
@@ -521,290 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
     switchTab('video');
   });
 
-  // 11. PITCH DECK SLIDE VIEWER (Slides 1 to 5)
-  const deckSlides = [
-    {
-      slideNum: "1/5",
-      title: "Real-Time Confusion-Aware Interactive Tutor",
-      subtitle: "Theme 06: Computational Creativity & Human-AI Interaction",
-      teamName: "VK 18",
-      teamId: "AH-52",
-      members: ["MADHU N", "NAGESHWARI BS", "PAVAN K", "KUSHAL NS"],
-      event: "AFTERHOURS 1.0 - CODE BEYOND THE CLOCK",
-      host: "AWS STUDENT BUILDER GROUP DBIT | Don Bosco Institute of Technology, Bengaluru, Karnataka",
-      contentHtml: `
-        <div class="flex flex-col items-center justify-center text-center py-8">
-          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 text-xs font-semibold mb-6">
-            <span>🔥</span> AFTERHOURS 1.0 • HACKATHON PROTOTYPE
-          </div>
-          <h1 class="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-200 to-indigo-300 mb-4">
-            Real-Time Confusion-Aware<br/>Interactive Tutor
-          </h1>
-          <p class="text-base text-slate-300 max-w-xl mx-auto mb-8">
-            Non-invasive keystroke telemetry, real-time cognitive friction diagnosis, and dynamic Socratic visual analogies.
-          </p>
-
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-2xl w-full text-left">
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-800">
-              <span class="text-[11px] text-slate-500 uppercase tracking-wider block">Theme</span>
-              <span class="text-xs font-bold text-amber-300">06: Comp. Creativity</span>
-            </div>
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-800">
-              <span class="text-[11px] text-slate-500 uppercase tracking-wider block">Team Name</span>
-              <span class="text-xs font-bold text-orange-400">VK 18</span>
-            </div>
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-800">
-              <span class="text-[11px] text-slate-500 uppercase tracking-wider block">Team ID</span>
-              <span class="text-xs font-bold text-indigo-400">AH-52</span>
-            </div>
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-800">
-              <span class="text-[11px] text-slate-500 uppercase tracking-wider block">Institution</span>
-              <span class="text-xs font-bold text-white">DBIT Bangalore</span>
-            </div>
-          </div>
-
-          <div class="mt-8 flex flex-wrap justify-center gap-2">
-            ${["MADHU N", "NAGESHWARI BS", "PAVAN K", "KUSHAL NS"].map(m => `
-              <span class="px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs font-medium text-slate-300">
-                👤 ${m}
-              </span>
-            `).join('')}
-          </div>
-        </div>
-      `
-    },
-    {
-      slideNum: "2/5",
-      title: "Theme & Problem Statement",
-      subtitle: "Theme 06: Computational Creativity & Human-AI Interaction",
-      contentHtml: `
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 py-6">
-          <div class="p-5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
-            <div>
-              <div class="w-10 h-10 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center text-xl mb-4">⚠️</div>
-              <h3 class="text-base font-bold text-white mb-2">What Exact Problem Are We Solving?</h3>
-              <ul class="text-xs text-slate-300 space-y-2 leading-relaxed">
-                <li>• <strong>Static E-Learning:</strong> Current coding & math platforms present rigid, one-way content that cannot sense learner cognitive load.</li>
-                <li>• <strong>Silent Struggle:</strong> When students get confused on abstract concepts, their struggle remains completely invisible in real time.</li>
-                <li>• <strong>Post-Mortem Discovery:</strong> Gaps are only identified after the student fails an assessment or gives up on the course entirely.</li>
-              </ul>
-            </div>
-          </div>
-
-          <div class="p-5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
-            <div>
-              <div class="w-10 h-10 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl mb-4">👥</div>
-              <h3 class="text-base font-bold text-white mb-2">For Whom Is This a Problem?</h3>
-              <ul class="text-xs text-slate-300 space-y-2 leading-relaxed">
-                <li>• <strong>Self-Paced Learners:</strong> Students learning programming and math remotely without live teacher guidance.</li>
-                <li>• <strong>Beginners in STEM:</strong> Learners who encounter non-intuitive syntax and unfamiliar mental models.</li>
-                <li>• <strong>EdTech Platforms:</strong> Online learning providers suffering from massive <strong>80%+ student dropout rates</strong>.</li>
-              </ul>
-            </div>
-          </div>
-
-          <div class="p-5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between">
-            <div>
-              <div class="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-xl mb-4">🎯</div>
-              <h3 class="text-base font-bold text-white mb-2">Why Does This Problem Matter?</h3>
-              <ul class="text-xs text-slate-300 space-y-2 leading-relaxed">
-                <li>• <strong>Halts Friction Early:</strong> Intervening dynamically at the point of confusion prevents cognitive burnout and frustration.</li>
-                <li>• <strong>Scalable 1-on-1 Guidance:</strong> Brings the proactive empathy of a human tutor to every student at zero marginal cost.</li>
-                <li>• <strong>Cognitive Alignment:</strong> Matches the delivery format dynamically to the learner's real-time comprehension state.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      `
-    },
-    {
-      slideNum: "3/5",
-      title: "Proposed Solution",
-      subtitle: "WHAT THE PRODUCT DOES",
-      contentHtml: `
-        <div class="py-6">
-          <div class="p-4 rounded-xl bg-indigo-950/40 border border-indigo-700/50 mb-6 text-xs text-slate-200 leading-relaxed">
-            <strong class="text-indigo-300 font-bold block mb-1">Executive Summary:</strong>
-            An interactive React coding & math workspace that monitors non-invasive behavioral telemetry (typing speed, deletion frequency, inactivity dwell time, and repeated incorrect attempts). When confusion is diagnosed, the AI tutor intervenes dynamically, switching from high-level abstract explanations to step-by-step visual analogies.
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 relative">
-              <span class="absolute -top-3 left-4 px-2 py-0.5 rounded bg-orange-600 text-[10px] font-bold text-white">Step 1</span>
-              <h4 class="font-bold text-white text-sm mb-2 mt-2">Practice</h4>
-              <p class="text-xs text-slate-300">Learner solves coding or math challenges inside an interactive React/Monaco workspace.</p>
-            </div>
-
-            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 relative">
-              <span class="absolute -top-3 left-4 px-2 py-0.5 rounded bg-amber-600 text-[10px] font-bold text-white">Step 2</span>
-              <h4 class="font-bold text-white text-sm mb-2 mt-2">Track Telemetry</h4>
-              <p class="text-xs text-slate-300">Client hooks measure typing cadence, burst deletions, idle dwell, and execution errors.</p>
-            </div>
-
-            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 relative">
-              <span class="absolute -top-3 left-4 px-2 py-0.5 rounded bg-red-600 text-[10px] font-bold text-white">Step 3</span>
-              <h4 class="font-bold text-white text-sm mb-2 mt-2">Detect Confusion</h4>
-              <p class="text-xs text-slate-300">Scoring heuristic detects struggle thresholds (e.g. repeated backspaces + 60s idle).</p>
-            </div>
-
-            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 relative">
-              <span class="absolute -top-3 left-4 px-2 py-0.5 rounded bg-emerald-600 text-[10px] font-bold text-white">Step 4</span>
-              <h4 class="font-bold text-white text-sm mb-2 mt-2">Dynamic Pivot</h4>
-              <p class="text-xs text-slate-300">AI Tutor intervenes via side-panel, switching from text to step-by-step visual analogies.</p>
-            </div>
-          </div>
-        </div>
-      `
-    },
-    {
-      slideNum: "4/5",
-      title: "How It Works & Architecture",
-      subtitle: "ARCHITECTURE & DATA FLOW",
-      contentHtml: `
-        <div class="py-6 space-y-6">
-          <div class="p-4 bg-slate-950 rounded-xl border border-slate-800 font-mono text-xs text-center text-slate-300 overflow-x-auto">
-            <span class="text-cyan-400 font-bold">[React Web IDE / Canvas]</span>
-            <span class="text-slate-500 mx-2">──(Telemetry Stream)──&gt;</span>
-            <span class="text-amber-400 font-bold">[Confusion Diagnostic Engine]</span>
-            <span class="text-slate-500 mx-2">──(Trigger Threshold)──&gt;</span>
-            <span class="text-orange-400 font-bold">[AWS Bedrock / LLM]</span>
-            <span class="text-slate-500 mx-2">──(Visual Metaphor)──&gt;</span>
-            <span class="text-emerald-400 font-bold">[Interactive Step-by-Step UI]</span>
-          </div>
-
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <h4 class="font-bold text-sm text-cyan-300 mb-2">Tech Stack</h4>
-              <ul class="text-xs text-slate-300 space-y-1.5">
-                <li>• <strong>Frontend:</strong> React, Tailwind CSS, Monaco Editor (syntax & telemetry capture).</li>
-                <li>• <strong>Backend & Cloud:</strong> Node.js / FastAPI, AWS Lambda (serverless triggers), Amazon DynamoDB (session telemetry & error logs).</li>
-                <li>• <strong>AI Engine:</strong> AWS Bedrock (Claude 3.5 Sonnet / Llama 3) for dynamic analogy generation.</li>
-              </ul>
-            </div>
-
-            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <h4 class="font-bold text-sm text-amber-300 mb-2">Data Source</h4>
-              <ul class="text-xs text-slate-300 space-y-1.5">
-                <li>• <strong>Keystroke Telemetry:</strong> Real-time typing velocity (WPM), burst deletes, backspace ratio.</li>
-                <li>• <strong>Interaction Dwell:</strong> Inactivity time per code line/math problem & compilation error loops.</li>
-                <li>• <strong>Synthetic Baselines:</strong> Calibrated against benchmark problem-solving logs to detect struggle vs. thinking.</li>
-              </ul>
-            </div>
-
-            <div class="p-4 rounded-xl bg-slate-900 border border-slate-800">
-              <h4 class="font-bold text-sm text-purple-300 mb-2">Why Theme's Tech Is Needed</h4>
-              <ul class="text-xs text-slate-300 space-y-1.5">
-                <li>• <strong>Human-AI Interaction:</strong> Interventions must be non-intrusive, respecting student cognitive flow without annoying them.</li>
-                <li>• <strong>Computational Creativity:</strong> Canned hints fail; AI dynamically synthesizes creative, relatable metaphors (e.g. arrays as lockers).</li>
-                <li>• <strong>Real-Time Adaptation:</strong> Low latency guarantees assistance right when the confusion happens.</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      `
-    },
-    {
-      slideNum: "5/5",
-      title: "What We Will Build",
-      subtitle: "Core features to be built and demoed during the hackathon",
-      contentHtml: `
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">
-          <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex gap-3">
-            <div class="w-8 h-8 rounded-lg bg-cyan-600/20 text-cyan-400 font-bold flex items-center justify-center shrink-0">1</div>
-            <div>
-              <h4 class="font-bold text-white text-sm mb-1">Telemetry-Instrumented React IDE</h4>
-              <p class="text-xs text-slate-300 leading-relaxed">
-                Monaco-powered coding dashboard instrumented with keystroke listeners. Monitors typing cadence, deletion frequency, dwell time, and execution errors. 100% privacy-preserving telemetry capture (zero webcam required).
-              </p>
-            </div>
-          </div>
-
-          <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex gap-3">
-            <div class="w-8 h-8 rounded-lg bg-amber-600/20 text-amber-400 font-bold flex items-center justify-center shrink-0">2</div>
-            <div>
-              <h4 class="font-bold text-white text-sm mb-1">Real-Time Confusion Scoring Engine</h4>
-              <p class="text-xs text-slate-300 leading-relaxed">
-                Lightweight heuristic algorithm evaluating cognitive friction thresholds. Distinguishes between constructive thinking pauses vs. unproductive struggle. Triggers adaptive tutoring events with sub-300ms latency.
-              </p>
-            </div>
-          </div>
-
-          <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex gap-3">
-            <div class="w-8 h-8 rounded-lg bg-orange-600/20 text-orange-400 font-bold flex items-center justify-center shrink-0">3</div>
-            <div>
-              <h4 class="font-bold text-white text-sm mb-1">Dynamic Socratic Intervention Modal</h4>
-              <p class="text-xs text-slate-300 leading-relaxed">
-                Non-intrusive slide-in AI tutor that activates only upon confusion triggers. Converts abstract syntax & math logic into step-by-step visual analogies. Offers progressive hints that gradually scaffold understanding.
-              </p>
-            </div>
-          </div>
-
-          <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex gap-3">
-            <div class="w-8 h-8 rounded-lg bg-purple-600/20 text-purple-400 font-bold flex items-center justify-center shrink-0">4</div>
-            <div>
-              <h4 class="font-bold text-white text-sm mb-1">Live Telemetry & Learning Heatmap</h4>
-              <p class="text-xs text-slate-300 leading-relaxed">
-                Live HUD display of student typing speed, struggle index, and error frequency. Post-session timeline marking exact struggle points for review. Complete end-to-end working demo ready for judges.
-              </p>
-            </div>
-          </div>
-        </div>
-      `
-    }
-  ];
-
-  function renderSlide(index) {
-    state.deckSlideIndex = index;
-    const slide = deckSlides[index];
-    const container = document.getElementById('slide-content-container');
-    if (!container) return;
-
-    container.innerHTML = `
-      <div class="slide-card rounded-2xl p-6 md:p-8 min-h-[500px] flex flex-col justify-between shadow-2xl relative">
-        <div class="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div class="flex items-center gap-3">
-            <div class="h-6 w-1 bg-orange-500 rounded-full"></div>
-            <div>
-              <span class="text-xs font-mono font-bold text-orange-400 uppercase tracking-widest">${slide.subtitle}</span>
-              <h2 class="text-xl md:text-2xl font-bold text-white">${slide.title}</h2>
-            </div>
-          </div>
-          <span class="px-3 py-1 rounded-full bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300">
-            Slide ${slide.slideNum}
-          </span>
-        </div>
-
-        <div class="flex-1 my-4">
-          ${slide.contentHtml}
-        </div>
-
-        <div class="flex items-center justify-between pt-4 border-t border-slate-800 text-xs text-slate-500">
-          <div class="flex items-center gap-2">
-            <span>AFTERHOURS 1.0</span>
-            <span>•</span>
-            <span class="text-orange-400 font-bold">Team VK 18 (AH-52)</span>
-          </div>
-          <div class="flex gap-2">
-            <button id="btn-slide-prev" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded transition ${index === 0 ? 'opacity-40 cursor-not-allowed' : ''}">
-              ◀ Previous
-            </button>
-            <button id="btn-slide-next" class="px-3 py-1 bg-orange-600 hover:bg-orange-500 text-white rounded font-medium shadow transition ${index === deckSlides.length - 1 ? 'opacity-40 cursor-not-allowed' : ''}">
-              Next Slide ▶
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-
-    document.getElementById('btn-slide-prev')?.addEventListener('click', () => {
-      if (state.deckSlideIndex > 0) renderSlide(state.deckSlideIndex - 1);
-    });
-    document.getElementById('btn-slide-next')?.addEventListener('click', () => {
-      if (state.deckSlideIndex < deckSlides.length - 1) renderSlide(state.deckSlideIndex + 1);
-    });
-  }
-
-  // 12. ANALYTICS & HEATMAP VIEW
+  // 11. ANALYTICS & HEATMAP VIEW
   function renderAnalyticsView() {
     const container = document.getElementById('analytics-content-container');
     if (!container) return;
@@ -884,72 +596,183 @@ document.addEventListener('DOMContentLoaded', () => {
       });
   }
 
-  // 13. COMPUTATIONAL CREATIVITY LAB VIEW
-  function renderCreativityLab() {
-    const container = document.getElementById('creativity-content-container');
-    if (!container) return;
+  // 12. USER AUTHENTICATION & LOGIN MANAGEMENT
+  function initAuth() {
+    const saved = localStorage.getItem('confusion_tutor_user');
+    if (saved) {
+      try {
+        state.currentUser = JSON.parse(saved);
+      } catch(e) {}
+    }
 
-    container.innerHTML = `
-      <div class="space-y-6">
-        <div class="p-4 rounded-xl bg-gradient-to-r from-orange-950/40 via-slate-900 to-indigo-950/40 border border-orange-500/30">
-          <h3 class="text-base font-bold text-white mb-1">Theme 06: Computational Creativity & Human-AI Interaction</h3>
-          <p class="text-xs text-slate-300 leading-relaxed">
-            Rather than serving generic syntax error messages or spoiling solutions, the tutor dynamically synthesizes creative, relatable visual metaphors that align with human spatial intuition.
-          </p>
+    if (state.currentUser) {
+      document.getElementById('main-nav-bar')?.classList.remove('hidden');
+      document.getElementById('main-simulator-bar')?.classList.remove('hidden');
+      updateAuthUI();
+      switchTab('workspace');
+    } else {
+      document.getElementById('main-nav-bar')?.classList.add('hidden');
+      document.getElementById('main-simulator-bar')?.classList.add('hidden');
+      updateAuthUI();
+      switchTab('login');
+    }
+
+    // Form tab toggles
+    const tabSignIn = document.getElementById('auth-tab-signin');
+    const tabSignUp = document.getElementById('auth-tab-signup');
+    const formSignIn = document.getElementById('form-signin');
+    const formSignUp = document.getElementById('form-signup');
+
+    tabSignIn?.addEventListener('click', (e) => {
+      e.preventDefault();
+      tabSignIn.className = 'text-sm font-bold text-orange-400 border-b-2 border-orange-500 pb-1 mr-6 transition';
+      tabSignUp.className = 'text-sm font-medium text-slate-400 hover:text-white pb-1 transition';
+      formSignIn?.classList.remove('hidden');
+      formSignUp?.classList.add('hidden');
+    });
+
+    tabSignUp?.addEventListener('click', (e) => {
+      e.preventDefault();
+      tabSignUp.className = 'text-sm font-bold text-orange-400 border-b-2 border-orange-500 pb-1 transition';
+      tabSignIn.className = 'text-sm font-medium text-slate-400 hover:text-white pb-1 mr-6 transition';
+      formSignUp?.classList.remove('hidden');
+      formSignIn?.classList.add('hidden');
+    });
+
+    // Form Sign In submission
+    formSignIn?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('signin-email')?.value.trim();
+      const password = document.getElementById('signin-password')?.value;
+      const errEl = document.getElementById('signin-error');
+
+      try {
+        const res = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.user) {
+          loginSuccess(data.user);
+        } else {
+          showAuthError(errEl, data.message || 'Login failed. Please check credentials.');
+        }
+      } catch(err) {
+        // Fallback for static/offline mode
+        loginSuccess({
+          id: 'u_' + Date.now(),
+          name: email.split('@')[0] || 'Alex Chen',
+          email: email || 'alex@student.edu',
+          role: 'Student',
+          avatar: '👨‍💻'
+        });
+      }
+    });
+
+    // Form Sign Up submission
+    formSignUp?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = document.getElementById('signup-name')?.value.trim();
+      const email = document.getElementById('signup-email')?.value.trim();
+      const password = document.getElementById('signup-password')?.value;
+      const role = document.getElementById('signup-role')?.value || 'Student';
+      const errEl = document.getElementById('signup-error');
+
+      try {
+        const res = await fetch('/api/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, password, role })
+        });
+        const data = await res.json();
+        if (res.ok && data.user) {
+          loginSuccess(data.user);
+        } else {
+          showAuthError(errEl, data.message || 'Registration failed.');
+        }
+      } catch(err) {
+        loginSuccess({
+          id: 'u_' + Date.now(),
+          name: name || 'Learner',
+          email: email || 'user@edu.com',
+          role: role,
+          avatar: role === 'Educator' ? '👩‍🏫' : '👨‍💻'
+        });
+      }
+    });
+
+    // 1-Click Demo Profiles
+    document.querySelectorAll('.quick-login-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const prof = btn.getAttribute('data-profile');
+        if (prof === 'student') {
+          loginSuccess({ id: 'u_1', name: 'Alex Chen', email: 'alex@student.edu', role: 'Student', avatar: '👨‍💻' });
+        } else if (prof === 'educator') {
+          loginSuccess({ id: 'u_2', name: 'Dr. Sarah Connor', email: 'sarah@edu.org', role: 'Educator', avatar: '👩‍🏫' });
+        } else {
+          loginSuccess({ id: 'u_3', name: 'Guest Learner', email: 'guest@demo.com', role: 'Guest', avatar: '🚀' });
+        }
+      });
+    });
+  }
+
+  function showAuthError(el, msg) {
+    if (!el) return;
+    el.textContent = msg;
+    el.classList.remove('hidden');
+    setTimeout(() => el.classList.add('hidden'), 5000);
+  }
+
+  function loginSuccess(user) {
+    state.currentUser = user;
+    localStorage.setItem('confusion_tutor_user', JSON.stringify(user));
+    document.getElementById('main-nav-bar')?.classList.remove('hidden');
+    document.getElementById('main-simulator-bar')?.classList.remove('hidden');
+    updateAuthUI();
+    telemetry.start();
+    switchTab('workspace');
+  }
+
+  function logoutUser() {
+    state.currentUser = null;
+    localStorage.removeItem('confusion_tutor_user');
+    fetch('/api/logout', { method: 'POST' }).catch(() => {});
+    document.getElementById('main-nav-bar')?.classList.add('hidden');
+    document.getElementById('main-simulator-bar')?.classList.add('hidden');
+    updateAuthUI();
+    telemetry.stop();
+    switchTab('login');
+  }
+
+  function updateAuthUI() {
+    const authContainer = document.getElementById('auth-header-container');
+    if (!authContainer) return;
+
+    if (state.currentUser) {
+      authContainer.innerHTML = `
+        <div class="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-xl px-2.5 py-1 text-xs shadow">
+          <span class="text-base">${state.currentUser.avatar || '👨‍💻'}</span>
+          <div class="leading-none pr-1">
+            <span class="font-bold text-white block text-[11px]">${state.currentUser.name}</span>
+            <span class="text-[9px] text-orange-400 font-mono">${state.currentUser.role}</span>
+          </div>
+          <button id="btn-logout" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-red-950 text-slate-400 hover:text-red-300 font-medium text-[10px] transition border border-slate-700/60" title="Sign Out">
+            Sign Out ⎋
+          </button>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col justify-between">
-            <div>
-              <span class="text-2xl mb-2 block">🪆</span>
-              <h4 class="font-bold text-white text-sm">Recursion -> Russian Dolls</h4>
-              <p class="text-xs text-slate-400 mt-1">Visualizes function stack frames as nested dolls. Solves the missing Base Case trap.</p>
-            </div>
-            <button id="btn-lab-dolls" class="mt-4 w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-lg shadow">
-              Open Interactive Demo
-            </button>
-          </div>
-
-          <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col justify-between">
-            <div>
-              <span class="text-2xl mb-2 block">🏫</span>
-              <h4 class="font-bold text-white text-sm">Two-Pointers -> Hallway Lockers</h4>
-              <p class="text-xs text-slate-400 mt-1">Converts array indices into school lockers and sliding student pointers.</p>
-            </div>
-            <button id="btn-lab-lockers" class="mt-4 w-full py-1.5 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg shadow">
-              Open Interactive Demo
-            </button>
-          </div>
-
-          <div class="p-4 rounded-xl bg-slate-900 border border-slate-800 flex flex-col justify-between">
-            <div>
-              <span class="text-2xl mb-2 block">📖</span>
-              <h4 class="font-bold text-white text-sm">Binary Search -> Phonebook Rip</h4>
-              <p class="text-xs text-slate-400 mt-1">Visualizes O(log N) page-halving and upper/lower bound clipping.</p>
-            </div>
-            <button id="btn-lab-phone" class="mt-4 w-full py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold rounded-lg shadow">
-              Open Interactive Demo
-            </button>
-          </div>
-        </div>
-
-        <!-- Metaphor Display Box -->
-        <div id="creativity-preview-box" class="mt-6"></div>
-      </div>
-    `;
-
-    const previewBox = document.getElementById('creativity-preview-box');
-    metaphorEngine.render('recursion_dolls', previewBox);
-
-    document.getElementById('btn-lab-dolls')?.addEventListener('click', () => {
-      metaphorEngine.render('recursion_dolls', previewBox);
-    });
-    document.getElementById('btn-lab-lockers')?.addEventListener('click', () => {
-      metaphorEngine.render('array_lockers', previewBox);
-    });
-    document.getElementById('btn-lab-phone')?.addEventListener('click', () => {
-      metaphorEngine.render('binary_search', previewBox);
-    });
+      `;
+      document.getElementById('btn-logout')?.addEventListener('click', logoutUser);
+    } else {
+      authContainer.innerHTML = `
+        <button id="btn-nav-login" class="px-3.5 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs shadow flex items-center gap-1.5 transition">
+          <span>🔑</span> Sign In
+        </button>
+      `;
+      document.getElementById('btn-nav-login')?.addEventListener('click', () => {
+        switchTab('login');
+      });
+    }
   }
 
   // 14. CHALLENGE SELECTOR CHANGE EVENT
@@ -962,7 +785,10 @@ document.addEventListener('DOMContentLoaded', () => {
     <option value="${idx}">${ch.title}</option>
   `).join('');
 
-  // Initial Load
+  // Initial Load: Check auth status (landing on Login if not authenticated)
   loadChallenge(0);
-  telemetry.start();
+  initAuth();
+  if (state.currentUser) {
+    telemetry.start();
+  }
 });
