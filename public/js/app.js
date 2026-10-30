@@ -29,7 +29,16 @@ document.addEventListener('DOMContentLoaded', () => {
       recentErrors: 0,
       currentLine: 1
     },
-    currentUser: null
+    currentUser: null,
+    lastExecutionResult: {
+      hasRun: false,
+      hasError: false,
+      errorName: null,
+      errorMessage: null,
+      actualOutput: null,
+      expectedOutput: '24',
+      isMatch: false
+    }
   };
 
   // Initialize Metaphor Visualizer Engine
@@ -79,9 +88,18 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('challenge-badge').textContent = challenge.difficulty;
     document.getElementById('challenge-desc').innerHTML = challenge.description.replace(/\n/g, '<br/>');
 
-    consoleOutput.innerHTML = `<span class="text-slate-500">// Ready to execute ${challenge.title}...</span>`;
+    consoleOutput.innerHTML = `<span class="text-slate-500">// Ready to execute ${challenge.title}... Target expected value: ${challenge.expectedOutput}</span>`;
     
-    // Reset confusion state for new challenge
+    // Reset execution and confusion state for new challenge
+    state.lastExecutionResult = {
+      hasRun: false,
+      hasError: false,
+      errorName: null,
+      errorMessage: null,
+      actualOutput: null,
+      expectedOutput: challenge.expectedOutput,
+      isMatch: false
+    };
     telemetry.resetToFlowState();
     refreshMetaphorInTutor(challenge);
   }
@@ -102,6 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function runUserCode() {
     const code = codeEditor.value;
+    const currentCh = window.CHALLENGES[state.currentChallengeIndex];
     state.isExecuting = true;
     consoleOutput.innerHTML = `<span class="text-cyan-400">⚡ Executing script in sandbox...</span>`;
 
@@ -109,6 +128,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let capturedLogs = [];
     let hadError = false;
     let errorDetail = null;
+    let errorName = null;
 
     const originalConsoleLog = console.log;
     console.log = function(...args) {
@@ -118,13 +138,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const startTime = performance.now();
     try {
-      // Run in function wrapper with 1.5s timeout protection against infinite loops
+      // Run in function wrapper with sandbox safety
       const runner = new Function(code);
       runner();
       const elapsed = Math.round(performance.now() - startTime);
 
+      const combinedOutput = capturedLogs.join(' ');
+      // Compare output with expected target value
+      const isMatch = combinedOutput.includes(currentCh.expectedOutput);
+
+      state.lastExecutionResult = {
+        hasRun: true,
+        hasError: false,
+        errorName: null,
+        errorMessage: null,
+        actualOutput: combinedOutput || 'No output returned',
+        expectedOutput: currentCh.expectedOutput,
+        isMatch: isMatch
+      };
+
       let outputHtml = `<div class="text-xs text-slate-400 pb-1 border-b border-slate-800 flex justify-between">
-        <span>Execution status: <strong class="text-emerald-400">SUCCESS</strong></span>
+        <span>Execution status: <strong class="${isMatch ? 'text-emerald-400' : 'text-amber-400'}">${isMatch ? 'PASSED ✅' : 'VALUE MISMATCH ⚠️'}</strong></span>
         <span>${elapsed}ms</span>
       </div>`;
 
@@ -134,12 +168,49 @@ document.addEventListener('DOMContentLoaded', () => {
         outputHtml += `<div class="text-slate-400 font-mono italic mt-1">(Code executed without console.log output)</div>`;
       }
 
+      // Expected vs Output Comparison Card
+      outputHtml += `
+        <div class="mt-2.5 p-2 bg-slate-900 border ${isMatch ? 'border-emerald-700/60' : 'border-amber-600/60'} rounded-lg text-xs flex flex-wrap justify-between items-center gap-2">
+          <div>
+            <span class="text-slate-400">Target Value:</span> <strong class="text-emerald-400 font-mono">${currentCh.expectedOutput}</strong>
+            <span class="mx-2 text-slate-600">|</span>
+            <span class="text-slate-400">Actual Result:</span> <strong class="${isMatch ? 'text-emerald-300' : 'text-amber-300'} font-mono">${escapeHtml(combinedOutput || 'undefined')}</strong>
+          </div>
+          ${!isMatch ? `
+            <button id="btn-terminal-open-fix" class="px-2.5 py-1 rounded bg-orange-600 hover:bg-orange-500 text-white font-bold text-[11px] shadow transition">
+              Inspect Corrected Value in AI Tutor ➔
+            </button>
+          ` : ''}
+        </div>
+      `;
+
       consoleOutput.innerHTML = outputHtml;
-      telemetry.recordExecutionSuccess();
+
+      document.getElementById('btn-terminal-open-fix')?.addEventListener('click', () => {
+        openTutorDrawer(true);
+        switchScaffoldingLevel(4);
+      });
+
+      if (isMatch) {
+        telemetry.recordExecutionSuccess();
+      } else {
+        telemetry.recordExecutionError('Output did not match expected value: ' + currentCh.expectedOutput);
+      }
     } catch (err) {
       hadError = true;
+      errorName = err.name;
       errorDetail = err.message || err.toString();
       const elapsed = Math.round(performance.now() - startTime);
+
+      state.lastExecutionResult = {
+        hasRun: true,
+        hasError: true,
+        errorName: errorName,
+        errorMessage: errorDetail,
+        actualOutput: `${errorName}: ${errorDetail}`,
+        expectedOutput: currentCh.expectedOutput,
+        isMatch: false
+      };
 
       consoleOutput.innerHTML = `
         <div class="text-xs text-slate-400 pb-1 border-b border-slate-800 flex justify-between">
@@ -149,15 +220,28 @@ document.addEventListener('DOMContentLoaded', () => {
         <div class="text-red-400 font-mono mt-2 p-2 bg-red-950/40 border border-red-800/60 rounded">
           ❌ <strong>${escapeHtml(err.name)}:</strong> ${escapeHtml(errorDetail)}
         </div>
-        <div class="text-xs text-amber-300/80 mt-2">
-          💡 Cognitive Telemetry: Execution error recorded. Repeated failures without modification will trigger the Socratic Tutor.
+        <div class="mt-2.5 p-2 bg-slate-900 border border-red-700/60 rounded-lg text-xs flex flex-wrap justify-between items-center gap-2">
+          <div>
+            <span class="text-slate-400">Target Corrected Value:</span> <strong class="text-emerald-400 font-mono">${currentCh.expectedOutput}</strong>
+            <span class="mx-2 text-slate-600">|</span>
+            <span class="text-slate-400">Status:</span> <strong class="text-red-400 font-mono">Crashed (${escapeHtml(err.name)})</strong>
+          </div>
+          <button id="btn-terminal-open-fix-err" class="px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-bold text-[11px] shadow transition">
+            See Corrected Value in AI Tutor ➔
+          </button>
         </div>
       `;
+
+      document.getElementById('btn-terminal-open-fix-err')?.addEventListener('click', () => {
+        openTutorDrawer(true);
+        switchScaffoldingLevel(4);
+      });
 
       telemetry.recordExecutionError(errorDetail);
     } finally {
       console.log = originalConsoleLog;
       state.isExecuting = false;
+      updateTutorErrorPanel(currentCh);
     }
   }
 
@@ -324,7 +408,93 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function updateTutorErrorPanel(challenge) {
+    if (!challenge) challenge = window.CHALLENGES[state.currentChallengeIndex];
+    const res = state.lastExecutionResult || { hasRun: false };
+
+    const iconEl = document.getElementById('tutor-error-icon');
+    const titleEl = document.getElementById('tutor-error-title');
+    const badgeEl = document.getElementById('tutor-error-badge');
+    const actualValEl = document.getElementById('tutor-actual-error-val');
+    const expectedValEl = document.getElementById('tutor-expected-correct-val');
+    const diagTextEl = document.getElementById('tutor-error-diagnosis-text');
+
+    const expectedDisplay = challenge.correctedOutput !== undefined ? challenge.correctedOutput : JSON.stringify(challenge.expectedOutput);
+    if (expectedValEl) {
+      expectedValEl.textContent = expectedDisplay;
+      expectedValEl.title = `Expected Correct Value: ${expectedDisplay}`;
+    }
+
+    if (!res.hasRun) {
+      if (iconEl) iconEl.textContent = 'ℹ️';
+      if (titleEl) {
+        titleEl.textContent = 'Execution Status: Ready';
+        titleEl.className = 'text-xs font-bold text-slate-300';
+      }
+      if (badgeEl) {
+        badgeEl.textContent = 'Not Run Yet';
+        badgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400 border border-slate-700';
+      }
+      if (actualValEl) actualValEl.textContent = '(Run code to inspect)';
+      if (diagTextEl) diagTextEl.textContent = challenge.errorFixExplanation || 'Click "Run Code" in the editor. The AI Tutor monitors execution and displays your actual value vs. corrected target value here.';
+      return;
+    }
+
+    if (res.hasError) {
+      if (iconEl) iconEl.textContent = '🚨';
+      if (titleEl) {
+        titleEl.textContent = `Runtime Crash: ${res.errorName || 'Error'}`;
+        titleEl.className = 'text-xs font-bold text-red-400';
+      }
+      if (badgeEl) {
+        badgeEl.textContent = 'Runtime Exception';
+        badgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-red-950 text-red-300 border border-red-700 animate-pulse';
+      }
+      if (actualValEl) {
+        actualValEl.textContent = `${res.errorName || 'Error'}: ${res.errorMessage}`;
+        actualValEl.title = `${res.errorName}: ${res.errorMessage}`;
+      }
+      if (diagTextEl) {
+        diagTextEl.textContent = challenge.errorFixExplanation || `Your code produced a ${res.errorName}: "${res.errorMessage}". Expected corrected target value is ${expectedDisplay}.`;
+      }
+    } else if (!res.isMatch) {
+      if (iconEl) iconEl.textContent = '⚠️';
+      if (titleEl) {
+        titleEl.textContent = 'Value Mismatch Detected';
+        titleEl.className = 'text-xs font-bold text-amber-400';
+      }
+      if (badgeEl) {
+        badgeEl.textContent = 'Wrong Output';
+        badgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-700';
+      }
+      if (actualValEl) {
+        actualValEl.textContent = typeof res.actualOutput === 'object' ? JSON.stringify(res.actualOutput) : String(res.actualOutput);
+        actualValEl.title = `Actual Output: ${actualValEl.textContent}`;
+      }
+      if (diagTextEl) {
+        diagTextEl.textContent = challenge.errorFixExplanation || `Your code returned ${actualValEl.textContent}, but the expected corrected value is ${expectedDisplay}. See Level 4 for the step-by-step fix.`;
+      }
+    } else {
+      if (iconEl) iconEl.textContent = '✅';
+      if (titleEl) {
+        titleEl.textContent = 'All Checks Passed!';
+        titleEl.className = 'text-xs font-bold text-emerald-400';
+      }
+      if (badgeEl) {
+        badgeEl.textContent = 'Correct Output';
+        badgeEl.className = 'px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-700';
+      }
+      if (actualValEl) {
+        actualValEl.textContent = typeof res.actualOutput === 'object' ? JSON.stringify(res.actualOutput) : String(res.actualOutput);
+      }
+      if (diagTextEl) {
+        diagTextEl.textContent = `Success! Your code generated the corrected expected value: ${expectedDisplay}.`;
+      }
+    }
+  }
+
   function refreshMetaphorInTutor(challenge) {
+    if (!challenge) challenge = window.CHALLENGES[state.currentChallengeIndex];
     const metaphor = challenge.defaultMetaphor || {};
     const titleEl = document.getElementById('tutor-metaphor-title');
     const explanationEl = document.getElementById('tutor-metaphor-explanation');
@@ -340,8 +510,43 @@ document.addEventListener('DOMContentLoaded', () => {
       metaphorEngine.render(metaphor.type, canvasContainer, {});
     }
 
-    // Set scaffolding tab to Level 1
-    switchScaffoldingLevel(state.activeHintLevel);
+    // Update dynamic Error & Corrected Value Panel
+    updateTutorErrorPanel(challenge);
+
+    // Update Level 4 (Corrected Value & Solution Scout)
+    const scaffoldExpectedBadge = document.getElementById('scaffold-expected-badge');
+    const scaffoldBreakdown = document.getElementById('scaffold-corrected-breakdown');
+    const scaffoldSnippet = document.getElementById('scaffold-corrected-snippet');
+    const btnApplyFix = document.getElementById('btn-apply-corrected-fix');
+
+    const expectedDisplay = challenge.correctedOutput !== undefined ? challenge.correctedOutput : JSON.stringify(challenge.expectedOutput);
+    if (scaffoldExpectedBadge) scaffoldExpectedBadge.textContent = `Expected: ${expectedDisplay}`;
+    if (scaffoldBreakdown) scaffoldBreakdown.textContent = challenge.correctedValueBreakdown || `Target value calculation: ${expectedDisplay}`;
+    if (scaffoldSnippet) scaffoldSnippet.textContent = challenge.correctedSnippet || challenge.correctedCode || '';
+
+    if (btnApplyFix) {
+      btnApplyFix.onclick = () => {
+        if (!challenge.correctedCode) return;
+        codeEditor.value = challenge.correctedCode;
+        updateLineNumbers();
+        btnApplyFix.innerHTML = '<span>✔️</span> Applied!';
+        btnApplyFix.classList.remove('bg-emerald-600', 'hover:bg-emerald-500');
+        btnApplyFix.classList.add('bg-emerald-700');
+        setTimeout(() => {
+          btnApplyFix.innerHTML = '<span>⚡</span> Apply Corrected Code';
+          btnApplyFix.classList.remove('bg-emerald-700');
+          btnApplyFix.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+        }, 1800);
+        runUserCode();
+      };
+    }
+
+    // Set scaffolding tab: if error exists, automatically open Level 4 (Fix Hint); otherwise keep user level
+    if (state.lastExecutionResult && (state.lastExecutionResult.hasError || !state.lastExecutionResult.isMatch)) {
+      switchScaffoldingLevel(4);
+    } else {
+      switchScaffoldingLevel(state.activeHintLevel || 1);
+    }
   }
 
   // Scaffolding Level Tabs (Slide 5: Progressive scaffolding)
@@ -401,36 +606,120 @@ document.addEventListener('DOMContentLoaded', () => {
     // Show AI typing indicator
     const typingIndicator = appendChatMessage('ai', '<span class="italic text-slate-400">AWS Bedrock Claude 3.5 Sonnet synthesizing Socratic reply...</span>');
 
+    const currentCh = window.CHALLENGES[state.currentChallengeIndex];
+    const execRes = state.lastExecutionResult || { hasRun: false };
+    const expectedDisplay = currentCh.correctedOutput !== undefined ? currentCh.correctedOutput : JSON.stringify(currentCh.expectedOutput);
+
     try {
       const res = await fetch('/api/bedrock-tutor', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          topic: window.CHALLENGES[state.currentChallengeIndex].topic,
+          topic: currentCh.topic,
           code: codeEditor.value,
-          question: text
+          question: text,
+          lastExecution: execRes,
+          expectedCorrectValue: expectedDisplay,
+          correctedBreakdown: currentCh.correctedValueBreakdown
         })
       });
       if (!res.ok) throw new Error('API offline');
       const data = await res.json();
       const metaphor = data.creativeMetaphor;
 
+      let errorContextHtml = '';
+      if (execRes.hasError) {
+        errorContextHtml = `
+          <div class="mt-2 p-2 bg-red-950/70 border border-red-800 rounded text-xs space-y-1">
+            <div class="font-bold text-red-300">Detected Error: ${execRes.errorName}</div>
+            <div class="text-slate-300">Corrected Target Value: <span class="font-mono text-emerald-300 font-bold">${expectedDisplay}</span></div>
+            <div class="text-[11px] text-cyan-300">${currentCh.correctedValueBreakdown || ''}</div>
+          </div>
+        `;
+      } else if (execRes.hasRun && !execRes.isMatch) {
+        errorContextHtml = `
+          <div class="mt-2 p-2 bg-amber-950/70 border border-amber-800 rounded text-xs space-y-1">
+            <div class="font-bold text-amber-300">Output Mismatch: Got ${JSON.stringify(execRes.actualOutput)}</div>
+            <div class="text-slate-300">Corrected Target Value: <span class="font-mono text-emerald-300 font-bold">${expectedDisplay}</span></div>
+            <div class="text-[11px] text-cyan-300">${currentCh.correctedValueBreakdown || ''}</div>
+          </div>
+        `;
+      }
+
       typingIndicator.innerHTML = `
         <div class="text-xs font-semibold text-orange-400 mb-1">🤖 AI Tutor (AWS Bedrock Claude 3.5):</div>
         <p class="text-xs text-slate-200">${metaphor.summary}</p>
+        ${errorContextHtml}
         <div class="mt-2 p-2 bg-slate-900 rounded border border-slate-700 text-xs text-amber-300">
           <strong>Socratic Nudge:</strong> ${metaphor.socraticPrompt}
         </div>
       `;
     } catch (err) {
       // Dynamic Local Socratic Engine (Offline & Static Mode fallback)
-      const currentCh = window.CHALLENGES[state.currentChallengeIndex];
       const m = currentCh.defaultMetaphor || {};
+      let errorAnalysisBlock = '';
+
+      if (execRes.hasError) {
+        errorAnalysisBlock = `
+          <div class="mt-2 p-2.5 bg-red-950/80 border border-red-700/80 rounded-lg text-xs space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-red-300">🛑 Error Detected: ${execRes.errorName}</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] bg-red-900 text-red-200">Runtime Crash</span>
+            </div>
+            <div class="text-slate-300 font-mono text-[11px] bg-slate-950/80 p-1.5 rounded border border-red-900/50">
+              ${escapeHtml(execRes.errorMessage || 'Execution halted abnormally.')}
+            </div>
+            <div class="text-emerald-300 font-semibold flex items-center justify-between pt-1 border-t border-red-900/40">
+              <span>Target Corrected Value:</span>
+              <span class="font-mono bg-emerald-950 px-2 py-0.5 rounded border border-emerald-600">${expectedDisplay}</span>
+            </div>
+            <p class="text-[11px] text-cyan-200 leading-normal">
+              <strong>Calculation:</strong> ${escapeHtml(currentCh.correctedValueBreakdown || '')}
+            </p>
+          </div>
+        `;
+      } else if (execRes.hasRun && !execRes.isMatch) {
+        errorAnalysisBlock = `
+          <div class="mt-2 p-2.5 bg-amber-950/80 border border-amber-700/80 rounded-lg text-xs space-y-1.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-amber-300">⚠️ Output Value Mismatch</span>
+              <span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-900 text-amber-200">Wrong Answer</span>
+            </div>
+            <div class="text-slate-300 font-mono text-[11px]">
+              Actual: <span class="text-red-400 font-bold">${JSON.stringify(execRes.actualOutput)}</span> vs Correct: <span class="text-emerald-400 font-bold">${expectedDisplay}</span>
+            </div>
+            <p class="text-[11px] text-cyan-200 leading-normal">
+              <strong>Calculation:</strong> ${escapeHtml(currentCh.correctedValueBreakdown || '')}
+            </p>
+          </div>
+        `;
+      } else if (execRes.hasRun && execRes.isMatch) {
+        errorAnalysisBlock = `
+          <div class="mt-2 p-2.5 bg-emerald-950/80 border border-emerald-700/80 rounded-lg text-xs space-y-1">
+            <div class="font-bold text-emerald-300">✅ Code Output Verified!</div>
+            <div class="text-slate-200 text-[11px]">Your output correctly matches target <span class="font-mono font-bold text-emerald-400">${expectedDisplay}</span>!</div>
+          </div>
+        `;
+      } else {
+        errorAnalysisBlock = `
+          <div class="mt-2 p-2 bg-slate-900 border border-slate-800 rounded-lg text-xs">
+            <span class="text-slate-400 block text-[10px]">Target Corrected Value for this problem:</span>
+            <span class="font-mono text-emerald-400 font-bold text-xs">${expectedDisplay}</span>
+            <div class="text-[11px] text-slate-300 mt-1">${escapeHtml(currentCh.correctedValueBreakdown || '')}</div>
+          </div>
+        `;
+      }
+
       typingIndicator.innerHTML = `
-        <div class="text-xs font-semibold text-orange-400 mb-1">🤖 AI Tutor (AWS Bedrock Synthesizer):</div>
-        <p class="text-xs text-slate-200">Think back to <strong>${m.title || 'the visual analogy'}</strong>. ${m.explanation || ''}</p>
+        <div class="text-xs font-semibold text-orange-400 mb-1">🤖 AI Tutor (Socratic Engine):</div>
+        <p class="text-xs text-slate-200">Think back to <strong>${escapeHtml(m.title || 'the visual analogy')}</strong>. ${escapeHtml(m.explanation || '')}</p>
+        ${errorAnalysisBlock}
         <div class="mt-2 p-2 bg-slate-900 rounded border border-slate-700 text-xs text-amber-300">
-          <strong>Socratic Nudge:</strong> Notice what is happening at Line ${state.liveTelemetry.currentLine}. What stopping condition or pointer adjustment is required to prevent an infinite cycle?
+          <strong>Socratic Nudge:</strong> Look at Line ${state.liveTelemetry.currentLine || 1}. ${escapeHtml(currentCh.errorFixExplanation || 'What condition is required to produce the corrected value?')}
+        </div>
+        <div class="mt-2 text-[10px] text-slate-400 flex items-center justify-between">
+          <span>Need the full code solution?</span>
+          <button class="text-emerald-400 hover:underline font-bold" onclick="document.querySelector('[data-level=\\'4\\']')?.click()">View Level 4 Scout ➔</button>
         </div>
       `;
     }

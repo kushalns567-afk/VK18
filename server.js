@@ -426,14 +426,60 @@ const server = http.createServer((req, res) => {
             severity: 'MODERATE'
           });
         } else {
-          // General
-          if (answers['q1'] === 'B') correctCount++;
-          else identifiedGaps.push({
-            id: 'boundary_shift',
-            concept: 'Midpoint Boundary Precision',
-            misconception: 'Off-by-one boundary shift leading to infinite search loops.',
-            severity: 'CRITICAL'
+          // General (handles all Python lessons and simplified variants)
+          const pythonAnswerMap = {
+            py_variables:   { q1: 'B', q2: 'B' },
+            py_variables_simple: { q1_simple: 'B' },
+            py_conditions:  { q1: 'B', q2: 'B' },
+            py_conditions_simple: { q1_simple: 'B' },
+            py_loops:       { q1: 'B', q2: 'B' },
+            py_loops_simple: { q1_simple: 'B' },
+            py_functions:   { q1: 'B', q2: 'B' },
+            py_functions_simple: { q1_simple: 'B' },
+            py_lists:       { q1: 'B', q2: 'B' },
+            py_lists_simple: { q1_simple: 'B' },
+            py_dicts:       { q1: 'B', q2: 'B' },
+            py_dicts_simple: { q1_simple: 'B' },
+            py_classes:     { q1: 'B', q2: 'B' },
+            py_classes_simple: { q1_simple: 'B' },
+            py_exceptions:  { q1: 'B', q2: 'B' },
+            py_exceptions_simple: { q1_simple: 'B' },
+            py_fileio:      { q1: 'B', q2: 'B' },
+            py_fileio_simple: { q1_simple: 'B' }
+          };
+          const conceptMap = {
+            q1: { py_variables: ['py_str_type','String Data Type Recognition'], py_conditions: ['py_indentation','Python Indentation & Block Scope'], py_loops: ['py_range_zero','Zero-Based range() Indexing'], py_functions: ['py_params_args','Parameters vs Arguments'], py_lists: ['py_negative_index','Negative List Indexing'], py_dicts: ['py_dict_key_access','Dictionary Key-Based Access'], py_classes: ['py_init_call','__init__ Constructor Call'], py_exceptions: ['py_except_trigger','except Conditional Execution'], py_fileio: ['py_write_overwrite','Write Mode File Truncation'] },
+            q2: { py_variables: ['py_type_conversion','Type Casting'], py_conditions: ['py_elif_skip','Short-Circuit Branch'], py_loops: ['py_loop_var','Loop Variable Assignment'], py_functions: ['py_return_none','return vs print'], py_lists: ['py_list_mutability','List append() Mutation'], py_dicts: ['py_key_error','KeyError on Missing Keys'], py_classes: ['py_self_meaning','self as Instance Reference'], py_exceptions: ['py_finally','finally Block Guarantee'], py_fileio: ['py_with_block','Context Manager Auto-Close'] },
+            q1_simple: { py_variables_simple: ['py_str_type','Jar-Type Matching'], py_conditions_simple: ['py_elif_skip','Traffic Light Priority'], py_loops_simple: ['py_range_zero','Conveyor Belt Zero-Start'], py_functions_simple: ['py_return_none','Vending Machine Dispense'], py_lists_simple: ['py_negative_index','Skeleton Key -1'], py_dicts_simple: ['py_dict_key_access','Phone Book Name Lookup'], py_classes_simple: ['py_self_meaning','Cookie Independence'], py_exceptions_simple: ['py_except_trigger','Safety Net Logic'], py_fileio_simple: ['py_write_overwrite','Write Mode Shredding'] }
+          };
+
+          const correctAnswers = pythonAnswerMap[lessonId] || { q1: 'B' };
+          Object.keys(answers).forEach(qKey => {
+            const correctAns = correctAnswers[qKey];
+            if (correctAns && answers[qKey] === correctAns) {
+              correctCount++;
+            } else {
+              const mapGroup = conceptMap[qKey];
+              const conceptEntry = mapGroup ? (mapGroup[lessonId] || ['general_concept', 'Conceptual Gap']) : ['general_concept', 'Conceptual Gap'];
+              identifiedGaps.push({
+                id: conceptEntry[0],
+                concept: conceptEntry[1],
+                misconception: `Incorrect answer on ${qKey} — needs re-teaching of ${conceptEntry[1]}`,
+                severity: 'MODERATE'
+              });
+            }
           });
+
+          if (identifiedGaps.length === 0 && Object.keys(answers).length === 0) {
+            // boundary_shift fallback for legacy binary_search
+            if (answers['q1'] === 'B') correctCount++;
+            else identifiedGaps.push({
+              id: 'boundary_shift',
+              concept: 'Midpoint Boundary Precision',
+              misconception: 'Off-by-one boundary shift leading to infinite search loops.',
+              severity: 'CRITICAL'
+            });
+          }
         }
 
         const scorePercent = totalQuestions > 0 ? Math.round((correctCount / totalQuestions) * 100) : 0;
