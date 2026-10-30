@@ -1,0 +1,131 @@
+/* ==============================================================================
+   AFTERHOURS 1.0 - CODE BEYOND THE CLOCK (DBIT)
+   Team VK 18 (AH-52) Custom Stylesheet
+   ============================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --primary-orange: #FF5722;
+  --primary-orange-glow: rgba(255, 87, 34, 0.35);
+  --accent-purple: #7C3AED;
+  --dark-bg: #0B0F19;
+  --dark-card: #111827;
+  --dark-panel: #1A2234;
+  --border-subtle: #2D3748;
+  --flow-green: #10B981;
+  --thinking-amber: #F59E0B;
+  --confusion-red: #EF4444;
+}
+
+body {
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--dark-bg);
+  color: #F3F4F6;
+  overflow-x: hidden;
+}
+
+code, pre, .font-mono {
+  font-family: 'Fira Code', monospace;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Glowing Accent Highlights */
+.glow-orange {
+  box-shadow: 0 0 25px var(--primary-orange-glow);
+}
+
+.glow-confusion {
+  box-shadow: 0 0 35px rgba(239, 68, 68, 0.45);
+  border-color: rgba(239, 68, 68, 0.8) !important;
+}
+
+.glow-flow {
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+.glow-thinking {
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+}
+
+/* Slide Transition Animations */
+.slide-in-right {
+  animation: slideRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes slideRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.25s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Code Editor Custom Textarea */
+.editor-line-numbers {
+  user-select: none;
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 22px;
+  color: #64748B;
+  text-align: right;
+  padding-right: 12px;
+}
+
+.code-textarea {
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+  line-height: 22px;
+  tab-size: 2;
+  white-space: pre;
+  word-wrap: normal;
+  overflow-x: auto;
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: #E2E8F0;
+  caret-color: #38BDF8;
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Slide Deck Styling */
+.slide-card {
+  background: radial-gradient(circle at 90% 10%, rgba(255, 87, 34, 0.12) 0%, transparent 60%),
+              radial-gradient(circle at 10% 90%, rgba(124, 58, 237, 0.12) 0%, transparent 50%),
+              #111827;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+

@@ -1,0 +1,12 @@
+{
+  "name": "confusion-aware-tutor-vk18",
+  "version": "1.0.0",
+  "description": "Real-Time Confusion-Aware Interactive Tutor for AFTERHOURS 1.0 Hackathon (Team VK 18, DBIT)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": ["ai-tutor", "telemetry", "human-ai-interaction", "afterhours", "dbit", "aws-bedrock"],
+  "author": "Team VK 18 (Madhu N, Nageshwari BS, Pavan K, Kushal NS)",
+  "license": "MIT"
+}
