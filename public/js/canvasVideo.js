@@ -20,14 +20,20 @@ class CanvasVideoEngine {
     this.blinkTimer = 0;
     this.particles = [];
     this.typedChars = 0;
+    this.subtitle = "";
     this.lastTypeTick = 0;
     this.typeSpeed = 2; // chars per frame
+  }
+
+  setSubtitle(text) {
+    this.subtitle = text || "";
   }
 
   resize() {
     if (!this.canvas) return;
     const rect = this.canvas.parentElement?.getBoundingClientRect();
-    this.canvas.width = rect ? rect.width : 720;
+    const w = rect && rect.width > 200 ? Math.floor(rect.width) : 760;
+    this.canvas.width = w;
     this.canvas.height = 380;
   }
 
@@ -96,6 +102,18 @@ class CanvasVideoEngine {
         { startSec: 20, type: 'code_intro',    title: 'Reading & Writing Files', code: ['# WRITE (overwrites existing!)', 'with open("notes.txt", "w") as f:', '    f.write("Hello World!\\n")', '', '# READ', 'with open("notes.txt", "r") as f:', '    content = f.read()', '    print(content)  # Hello World!'], colors: ['#94A3B8','#EF4444','#F59E0B','#94A3B8','#94A3B8','#38BDF8','#A78BFA','#4ADE80'], bg: '#0f172a' },
         { startSec: 55, type: 'code_fix',      title: 'with = Auto-Close ✅', code: ['# with → auto-closes safely:', 'with open("data.txt", "a") as f:', '    f.write("New line\\n") # append', '', '# NEVER forget to close otherwise:', 'f = open("data.txt", "r")', '# ... if crash here, file stays open! ❌'], colors: ['#94A3B8','#4ADE80','#F59E0B','#94A3B8','#94A3B8','#EF4444','#EF4444'], bg: '#022c22' }
       ],
+      // Peer-to-Peer Knowledge Exchange & Collaborative Learning
+      peer_knowledge_exchange: [
+        { startSec: 0,  type: 'peer_intro',    title: 'The Feynman Technique (Peer Teaching)', bg: '#0f172a' },
+        { startSec: 20, type: 'peer_network',  title: 'Decentralized Peer Knowledge Network', bg: '#0b1329' },
+        { startSec: 55, type: 'peer_code_swap',title: 'Collaborative Code Review & Edge Cases', bg: '#06202a' },
+        { startSec: 75, type: 'summary',       title: 'Peer Learning Collective Intelligence', points: ['1️⃣  Teaching a peer exposes your implicit knowledge gaps', '2️⃣  Reviewing peer code trains edge-case intuition', '3️⃣  Swapping visual mental models unlocks 10x faster mastery'], bg: '#1e1b4b' }
+      ],
+      peer_knowledge_exchange_simple: [
+        { startSec: 0,  type: 'peer_intro',    title: 'Study Buddy Knowledge Swap', bg: '#0f172a' },
+        { startSec: 18, type: 'peer_network',  title: 'Peers Swapping Intuitive Tricks', bg: '#0b1329' },
+        { startSec: 40, type: 'summary',       title: 'Why Peer Exchange Works', points: ['🤝 Two brains see what one brain missed', '💡 "If you can\'t explain it simply, you don\'t understand it"', '⭐ Learn together, level up together'], bg: '#022c22' }
+      ],
       // Simplified tracks use visual analogy scenes
       recursion_simplified: [
         { startSec: 0,  type: 'dolls_anim',    title: 'Russian Nesting Dolls', count: 5, bg: '#0f172a' },
@@ -132,8 +150,11 @@ class CanvasVideoEngine {
   }
 
   seekTo(timeSec) {
-    this.startTime = performance.now() - (timeSec * 1000);
-    this.typedChars = 0;
+    if (!this.startTime) return;
+    const currentElapsed = (performance.now() - this.startTime) / 1000;
+    if (Math.abs(currentElapsed - timeSec) > 1.2) {
+      this.startTime = performance.now() - (timeSec * 1000);
+    }
   }
 
   _frame() {
@@ -153,6 +174,7 @@ class CanvasVideoEngine {
     const ctx = this.ctx;
     const W = this.canvas.width;
     const H = this.canvas.height;
+    const sceneElapsed = Math.max(0, t - (scene.startSec || 0));
 
     // Background
     ctx.fillStyle = scene.bg || '#0f172a';
@@ -164,38 +186,43 @@ class CanvasVideoEngine {
     for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
-    // Render by scene type
+    // Render by scene type using sceneElapsed so each chapter starts cleanly from 0s!
     switch (scene.type) {
       case 'code_intro':
-      case 'code_fix':   this._renderCodeScene(scene, t, W, H); break;
-      case 'stack_diagram': this._renderStackDiagram(scene, t, W, H); break;
-      case 'jars':       this._renderJars(scene, t, W, H); break;
-      case 'traffic_light': this._renderTrafficLight(scene, t, W, H); break;
-      case 'conveyor':   this._renderConveyor(scene, t, W, H); break;
-      case 'vending':    this._renderVending(scene, t, W, H); break;
-      case 'lockers':    this._renderLockers(scene, t, W, H); break;
-      case 'phonebook':  this._renderPhonebook(scene, t, W, H); break;
-      case 'blueprint':  this._renderBlueprint(scene, t, W, H); break;
-      case 'safetynet':  this._renderSafetyNet(scene, t, W, H); break;
-      case 'cabinet':    this._renderCabinet(scene, t, W, H); break;
-      case 'comparison': this._renderComparison(scene, t, W, H); break;
-      case 'dolls_anim': this._renderDolls(scene, t, W, H); break;
-      case 'summary':    this._renderSummary(scene, t, W, H); break;
-      default:           this._renderCodeScene(scene, t, W, H);
+      case 'code_fix':      this._renderCodeScene(scene, sceneElapsed, W, H); break;
+      case 'stack_diagram': this._renderStackDiagram(scene, sceneElapsed, W, H); break;
+      case 'jars':          this._renderJars(scene, sceneElapsed, W, H); break;
+      case 'traffic_light': this._renderTrafficLight(scene, sceneElapsed, W, H); break;
+      case 'conveyor':      this._renderConveyor(scene, sceneElapsed, W, H); break;
+      case 'vending':       this._renderVending(scene, sceneElapsed, W, H); break;
+      case 'lockers':       this._renderLockers(scene, sceneElapsed, W, H); break;
+      case 'phonebook':     this._renderPhonebook(scene, sceneElapsed, W, H); break;
+      case 'blueprint':     this._renderBlueprint(scene, sceneElapsed, W, H); break;
+      case 'safetynet':     this._renderSafetyNet(scene, sceneElapsed, W, H); break;
+      case 'cabinet':       this._renderCabinet(scene, sceneElapsed, W, H); break;
+      case 'comparison':    this._renderComparison(scene, sceneElapsed, W, H); break;
+      case 'dolls_anim':    this._renderDolls(scene, sceneElapsed, W, H); break;
+      case 'peer_intro':    this._renderPeerIntro(scene, sceneElapsed, W, H); break;
+      case 'peer_network':  this._renderPeerNetwork(scene, sceneElapsed, W, H); break;
+      case 'peer_code_swap':this._renderPeerCodeSwap(scene, sceneElapsed, W, H); break;
+      case 'summary':       this._renderSummary(scene, sceneElapsed, W, H); break;
+      default:              this._renderCodeScene(scene, sceneElapsed, W, H);
     }
 
     // Floating particles
     this._updateParticles(ctx, W, H, scene.bg);
 
-    // Talking avatar bottom-left
-    this._renderAvatar(ctx, W, H);
-
-    // Top title bar
+    // Top title bar with AI Tutor
     this._renderTitleBar(ctx, scene.title, W);
+
+    // Closed-caption subtitle bar at bottom
+    if (this.subtitle) {
+      this._renderSubtitle(ctx, this.subtitle, W, H);
+    }
 
     // Scanline overlay (CRT feel)
     for (let y = 0; y < H; y += 4) {
-      ctx.fillStyle = 'rgba(0,0,0,0.06)';
+      ctx.fillStyle = 'rgba(0,0,0,0.04)';
       ctx.fillRect(0, y, W, 2);
     }
   }
@@ -205,10 +232,10 @@ class CanvasVideoEngine {
     const ctx = this.ctx;
     const lines = scene.code || [];
     const colors = scene.colors || [];
-    const lineH = 22;
+    const lineH = 21;
     const startX = Math.floor(W * 0.08);
-    const startY = 90;
-    const boxH = lines.length * lineH + 30;
+    const startY = 68;
+    const boxH = Math.min(H - 135, lines.length * lineH + 28);
     const boxW = Math.floor(W * 0.84);
 
     // Code editor box
@@ -222,13 +249,14 @@ class CanvasVideoEngine {
     ctx.beginPath(); ctx.moveTo(startX + 22, startY - 15); ctx.lineTo(startX + 22, startY - 15 + boxH); ctx.stroke();
 
     const totalChars = lines.join('\n').length;
-    const charsPerSec = Math.max(12, totalChars / 6);
-    this.typedChars = Math.min(totalChars, Math.floor(t * charsPerSec));
+    const charsPerSec = Math.max(16, totalChars / 4.5);
+    const typedChars = Math.min(totalChars, Math.floor(t * charsPerSec));
 
     let charCount = 0;
     lines.forEach((line, i) => {
       const lineColor = colors[i] || '#E2E8F0';
       const y = startY + i * lineH;
+      if (y > startY + boxH - 15) return;
 
       // Line number
       ctx.font = '11px monospace';
@@ -236,14 +264,14 @@ class CanvasVideoEngine {
       ctx.fillText(String(i + 1), startX - 6, y);
 
       // Code text (typed effect)
-      const charsForThisLine = Math.max(0, this.typedChars - charCount);
+      const charsForThisLine = Math.max(0, typedChars - charCount);
       const displayLine = line.substring(0, charsForThisLine);
       ctx.font = '13px monospace';
       ctx.fillStyle = lineColor;
       ctx.fillText(displayLine, startX + 28, y);
 
       // Blinking cursor on current typing line
-      if (charsForThisLine > 0 && charsForThisLine < line.length && Math.floor(t * 2) % 2 === 0) {
+      if (charsForThisLine > 0 && charsForThisLine < line.length && Math.floor(t * 3) % 2 === 0) {
         const measured = ctx.measureText(displayLine).width;
         ctx.fillStyle = '#F97316';
         ctx.fillRect(startX + 28 + measured, y - 13, 2, 15);
@@ -253,7 +281,7 @@ class CanvasVideoEngine {
     });
 
     // Spawn code particles as chars appear
-    if (this.typedChars < totalChars && this.tick % 8 === 0) {
+    if (typedChars < totalChars && this.tick % 8 === 0) {
       this.particles.push({ x: startX + 120 + Math.random() * 200, y: startY + Math.random() * boxH, vx: (Math.random() - 0.5) * 2, vy: -Math.random() * 1.5, life: 40, color: colors[Math.floor(Math.random() * colors.length)] || '#38BDF8', size: 3 + Math.random() * 3 });
     }
   }
@@ -810,81 +838,361 @@ class CanvasVideoEngine {
     ctx.textAlign = 'left';
   }
 
+  // ── PEER INTRO (Feynman Technique) ────────────────────────────────────────
+  _renderPeerIntro(scene, t, W, H) {
+    const ctx = this.ctx;
+    const cardW = Math.floor(W * 0.38);
+    const cardH = 160;
+    const cardY = 72;
+    const leftX = Math.floor(W * 0.08);
+    const rightX = W - leftX - cardW;
+
+    // Student A (Explainer)
+    const bounceA = Math.sin(t * 2) * 4;
+    this._roundRect(ctx, leftX, cardY + bounceA, cardW, cardH, 12, '#1e293b', '#38BDF8', 2);
+    ctx.font = '26px sans-serif';
+    ctx.fillText('🧑‍💻', leftX + 14, cardY + 38 + bounceA);
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillStyle = '#38BDF8';
+    ctx.fillText('Peer A (The Explainer)', leftX + 50, cardY + 32 + bounceA);
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = '#94A3B8';
+    ctx.fillText('Feynman Technique in action', leftX + 50, cardY + 48 + bounceA);
+
+    // Bubble A
+    this._roundRect(ctx, leftX + 12, cardY + 62 + bounceA, cardW - 24, 78, 8, '#0f172a', '#334155', 1);
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#4ADE80';
+    ctx.fillText('def factorial(n):', leftX + 20, cardY + 84 + bounceA);
+    ctx.fillText('  # "Opening nesting dolls!"', leftX + 20, cardY + 102 + bounceA);
+    ctx.fillText('  if n <= 1: return 1', leftX + 20, cardY + 120 + bounceA);
+
+    // Student B (Learner)
+    const bounceB = Math.sin(t * 2 + Math.PI) * 4;
+    this._roundRect(ctx, rightX, cardY + bounceB, cardW, cardH, 12, '#1e293b', '#F59E0B', 2);
+    ctx.font = '26px sans-serif';
+    ctx.fillText('👩‍🎓', rightX + 14, cardY + 38 + bounceB);
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillStyle = '#F59E0B';
+    ctx.fillText('Peer B (The Receiver)', rightX + 50, cardY + 32 + bounceB);
+    ctx.font = '10px sans-serif';
+    ctx.fillStyle = '#94A3B8';
+    ctx.fillText('Active listener & Questioner', rightX + 50, cardY + 48 + bounceB);
+
+    // Bubble B
+    this._roundRect(ctx, rightX + 12, cardY + 62 + bounceB, cardW - 24, 78, 8, '#0f172a', '#334155', 1);
+    ctx.font = '11px sans-serif';
+    ctx.fillStyle = '#E2E8F0';
+    ctx.fillText('💡 "Aha! So the solid doll', rightX + 20, cardY + 86 + bounceB);
+    ctx.fillText('is the base case that stops', rightX + 20, cardY + 104 + bounceB);
+    ctx.fillText('the memory explosion!"', rightX + 20, cardY + 122 + bounceB);
+
+    // Central bidirectional arrow & exchange particle
+    const midX = W / 2;
+    const arrowY = cardY + 80;
+    ctx.strokeStyle = '#F97316';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(leftX + cardW + 8, arrowY);
+    ctx.lineTo(rightX - 8, arrowY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Moving knowledge particle
+    const pX = leftX + cardW + 8 + ((t * 80) % (rightX - leftX - cardW - 16));
+    ctx.beginPath();
+    ctx.arc(pX, arrowY, 5, 0, Math.PI * 2);
+    ctx.fillStyle = '#4ADE80';
+    ctx.fill();
+
+    // Bottom badge
+    this._roundRect(ctx, midX - 150, cardY + cardH + 12, 300, 26, 13, 'rgba(15,23,42,0.95)', '#F97316', 1.5);
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = '#F97316';
+    ctx.textAlign = 'center';
+    ctx.fillText('⚡ 10x RETENTION: Teaching Solves Your Own Confusion', midX, cardY + cardH + 29);
+    ctx.textAlign = 'left';
+  }
+
+  // ── PEER NETWORK (Collaborative Mesh) ────────────────────────────────────
+  _renderPeerNetwork(scene, t, W, H) {
+    const ctx = this.ctx;
+    const cx = W / 2, cy = Math.floor(H / 2) - 15;
+    const radius = Math.min(125, Math.floor(W * 0.22));
+
+    const nodes = [
+      { name: 'Alex', role: 'Algorithm Lead', icon: '🧑‍💻', color: '#38BDF8', angle: 0 },
+      { name: 'Maya', role: 'Visual Architect', icon: '👩‍🎨', color: '#F59E0B', angle: Math.PI / 2 },
+      { name: 'Sam', role: 'Test Engineer', icon: '👨‍🔬', color: '#4ADE80', angle: Math.PI },
+      { name: 'Priya', role: 'Logic Optimizer', icon: '👩‍💻', color: '#A78BFA', angle: Math.PI * 1.5 }
+    ];
+
+    const pos = nodes.map(n => ({
+      ...n,
+      x: cx + Math.cos(n.angle + t * 0.15) * radius,
+      y: cy + Math.sin(n.angle + t * 0.15) * (radius * 0.68)
+    }));
+
+    // Draw connecting mesh lines with glowing pulses
+    for (let i = 0; i < pos.length; i++) {
+      for (let j = i + 1; j < pos.length; j++) {
+        const pulse = 0.15 + Math.abs(Math.sin(t * 2 + i + j)) * 0.35;
+        ctx.strokeStyle = `rgba(56, 189, 248, ${pulse})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(pos[i].x, pos[i].y);
+        ctx.lineTo(pos[j].x, pos[j].y);
+        ctx.stroke();
+
+        const prog = ((t * 0.6 + i * 0.3 + j * 0.2) % 1);
+        const pkX = pos[i].x + (pos[j].x - pos[i].x) * prog;
+        const pkY = pos[i].y + (pos[j].y - pos[i].y) * prog;
+        ctx.beginPath();
+        ctx.arc(pkX, pkY, 3, 0, Math.PI * 2);
+        ctx.fillStyle = pos[i].color;
+        ctx.fill();
+      }
+    }
+
+    // Central Hub Core
+    ctx.beginPath();
+    ctx.arc(cx, cy, 24, 0, Math.PI * 2);
+    ctx.fillStyle = '#0f172a';
+    ctx.fill();
+    ctx.strokeStyle = '#F97316';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.font = '15px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('🤝', cx, cy + 5);
+
+    // Draw each peer node
+    pos.forEach((n) => {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, 18, 0, Math.PI * 2);
+      ctx.fillStyle = '#1e293b';
+      ctx.fill();
+      ctx.strokeStyle = n.color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.font = '14px sans-serif';
+      ctx.fillText(n.icon, n.x, n.y + 4);
+
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillStyle = '#E2E8F0';
+      ctx.fillText(n.name, n.x, n.y + 30);
+      ctx.font = '9px sans-serif';
+      ctx.fillStyle = n.color;
+      ctx.fillText(n.role, n.x, n.y + 41);
+    });
+
+    ctx.textAlign = 'left';
+
+    this._roundRect(ctx, cx - 130, 52, 260, 22, 11, 'rgba(15,23,42,0.85)', '#4ADE80', 1);
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = '#4ADE80';
+    ctx.textAlign = 'center';
+    ctx.fillText('🟢 4 PEERS ACTIVE • REAL-TIME MENTAL MODEL SYNC', cx, 67);
+    ctx.textAlign = 'left';
+  }
+
+  // ── PEER CODE SWAP ────────────────────────────────────────────────────────
+  _renderPeerCodeSwap(scene, t, W, H) {
+    const ctx = this.ctx;
+    const cardW = Math.floor(W * 0.42);
+    const cardH = 168;
+    const startY = 64;
+    const leftX = Math.floor(W * 0.06);
+    const rightX = W - leftX - cardW;
+
+    // Left: Peer A (Initial Draft)
+    this._roundRect(ctx, leftX, startY, cardW, cardH, 10, '#1e293b', '#EF4444', 1.5);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(leftX, startY, cardW, 26);
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = '#EF4444';
+    ctx.fillText('🧑‍💻 Peer A: Naive Nested Loops (O(N²))', leftX + 10, startY + 17);
+
+    const codeA = [
+      'def two_sum(nums, target):',
+      '    for i in range(len(nums)):',
+      '        for j in range(i+1, len(nums)):',
+      '            if nums[i]+nums[j]==target:',
+      '                return [i, j]  # ⚠️ Slow O(N²)'
+    ];
+    ctx.font = '10px monospace';
+    codeA.forEach((l, i) => {
+      ctx.fillStyle = i === 4 ? '#EF4444' : '#94A3B8';
+      ctx.fillText(l, leftX + 10, startY + 46 + i * 17);
+    });
+
+    // Right: Peer B (Collaborative Review Fix)
+    this._roundRect(ctx, rightX, startY, cardW, cardH, 10, '#1e293b', '#4ADE80', 1.5);
+    ctx.fillStyle = '#0f172a';
+    ctx.fillRect(rightX, startY, cardW, 26);
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = '#4ADE80';
+    ctx.fillText('👩‍🎓 Peer B Review: Hash Map (O(N) ⚡)', rightX + 10, startY + 17);
+
+    const codeB = [
+      'def two_sum(nums, target):',
+      '    seen = {}  # 💡 Peer tip: lookup O(1)',
+      '    for i, num in enumerate(nums):',
+      '        diff = target - num',
+      '        if diff in seen: return [seen[diff], i]'
+    ];
+    ctx.font = '10px monospace';
+    codeB.forEach((l, i) => {
+      ctx.fillStyle = i === 1 || i === 4 ? '#4ADE80' : '#E2E8F0';
+      ctx.fillText(l, rightX + 10, startY + 46 + i * 17);
+    });
+
+    // Center Bridge Badge
+    const midX = W / 2;
+    this._roundRect(ctx, midX - 90, startY + cardH + 8, 180, 26, 13, '#0f172a', '#38BDF8', 1.5);
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = '#38BDF8';
+    ctx.textAlign = 'center';
+    ctx.fillText('🤝 SPEEDUP: 10,000x FASTER!', midX, startY + cardH + 25);
+    ctx.textAlign = 'left';
+  }
+
   // ── SUMMARY SCREEN ────────────────────────────────────────────────────────
   _renderSummary(scene, t, W, H) {
     const ctx = this.ctx;
     const points = scene.points || [];
     const boxX = Math.floor(W * 0.08), boxW = Math.floor(W * 0.84);
+    const boxH = Math.min(H - 130, points.length * 38 + 24);
 
-    this._roundRect(ctx, boxX, 65, boxW, points.length * 44 + 30, 14, '#0f172a', '#334155', 1.5);
+    this._roundRect(ctx, boxX, 60, boxW, boxH, 14, '#0f172a', '#334155', 1.5);
 
     points.forEach((pt, i) => {
-      const fade = Math.min(1, t * 1.2 - i * 0.5);
+      const fade = Math.min(1, t * 1.5 - i * 0.4);
       ctx.globalAlpha = Math.max(0, fade);
-      const y = 100 + i * 44;
+      const y = 92 + i * 38;
+      if (y > 60 + boxH - 10) return;
       // Bullet line
       ctx.fillStyle = i % 2 === 0 ? 'rgba(56,189,248,0.06)' : 'transparent';
-      ctx.fillRect(boxX, y - 16, boxW, 38);
-      ctx.font = 'bold 14px sans-serif';
+      ctx.fillRect(boxX, y - 14, boxW, 32);
+      ctx.font = 'bold 13px sans-serif';
       ctx.fillStyle = '#E2E8F0';
-      ctx.fillText(pt, boxX + 18, y + 8);
+      ctx.fillText(pt, boxX + 18, y + 6);
       ctx.globalAlpha = 1;
     });
   }
 
-  // ── AVATAR ───────────────────────────────────────────────────────────────
-  _renderAvatar(ctx, W, H) {
-    const ax = 14, ay = H - 72, ar = 28;
-    ctx.shadowBlur = 10;
-    ctx.shadowColor = '#38BDF8';
-    ctx.beginPath();
-    ctx.arc(ax + ar, ay + ar, ar, 0, Math.PI * 2);
-    ctx.fillStyle = '#1e3a5f';
-    ctx.fill();
-    ctx.strokeStyle = '#38BDF8';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Eyes
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.ellipse(ax + ar - 8, ay + ar - 6, 5, this.avatarBlink ? 1 : 5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(ax + ar + 8, ay + ar - 6, 5, this.avatarBlink ? 1 : 5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.arc(ax + ar - 8, ay + ar - 6, 2.5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(ax + ar + 8, ay + ar - 6, 2.5, 0, Math.PI * 2); ctx.fill();
-
-    // Mouth (animates with speech)
-    const mouthH = 3 + Math.abs(Math.sin(this.tick * 0.18)) * 6;
-    ctx.fillStyle = '#F97316';
-    ctx.beginPath();
-    ctx.ellipse(ax + ar, ay + ar + 10, 8, mouthH / 2, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.font = '9px sans-serif';
-    ctx.fillStyle = '#94A3B8';
-    ctx.fillText('AI Tutor', ax, ay + ar * 2 + 8);
-  }
-
-  // ── TITLE BAR ────────────────────────────────────────────────────────────
+  // ── TITLE BAR & AI TUTOR BADGE ──────────────────────────────────────────
   _renderTitleBar(ctx, title, W) {
-    ctx.fillStyle = 'rgba(15,23,42,0.88)';
+    ctx.fillStyle = 'rgba(15,23,42,0.95)';
     ctx.fillRect(0, 0, W, 46);
     ctx.strokeStyle = '#334155';
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, 46); ctx.lineTo(W, 46); ctx.stroke();
 
-    // Dot indicators
-    [[10, '#EF4444'], [28, '#F59E0B'], [46, '#4ADE80']].forEach(([x, c]) => {
-      ctx.beginPath(); ctx.arc(x, 22, 7, 0, Math.PI * 2);
+    // Window control dots
+    [[14, '#EF4444'], [30, '#F59E0B'], [46, '#4ADE80']].forEach(([x, c]) => {
+      ctx.beginPath(); ctx.arc(x, 23, 5, 0, Math.PI * 2);
       ctx.fillStyle = c; ctx.fill();
     });
 
+    // Lesson Chapter Title
     ctx.font = 'bold 13px sans-serif';
     ctx.fillStyle = '#E2E8F0';
     ctx.textAlign = 'center';
-    ctx.fillText(title || '', W / 2, 27);
+    ctx.fillText(title || '', W / 2, 28);
     ctx.textAlign = 'left';
+
+    // AI Tutor Badge in Top-Right
+    const ax = W - 142, ay = 8, aw = 130, ah = 30;
+    this._roundRect(ctx, ax, ay, aw, ah, 15, 'rgba(30, 41, 59, 0.9)', '#38BDF8', 1);
+
+    // Tutor Avatar Circle
+    ctx.beginPath();
+    ctx.arc(ax + 16, ay + 15, 11, 0, Math.PI * 2);
+    ctx.fillStyle = '#1e3a5f';
+    ctx.fill();
+    ctx.strokeStyle = '#38BDF8';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Eyes
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(ax + 13, ay + 13, 2, this.avatarBlink ? 0.5 : 2.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(ax + 19, ay + 13, 2, this.avatarBlink ? 0.5 : 2.5, 0, 0, Math.PI * 2); ctx.fill();
+
+    // Talking Mouth
+    const mouthH = this.isRunning ? (1 + Math.abs(Math.sin(this.tick * 0.2)) * 3) : 1;
+    ctx.fillStyle = '#F97316';
+    ctx.beginPath();
+    ctx.ellipse(ax + 16, ay + 19, 3, mouthH / 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Text Label
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = '#38BDF8';
+    ctx.fillText('AI TUTOR', ax + 34, ay + 19);
+
+    // Live Indicator Dot
+    if (this.isRunning) {
+      ctx.beginPath();
+      ctx.arc(ax + 114, ay + 15, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#4ADE80';
+      ctx.fill();
+    }
+  }
+
+  // ── SUBTITLE BANNER ───────────────────────────────────────────────────────
+  _renderSubtitle(ctx, text, W, H) {
+    if (!text) return;
+    const subH = 48;
+    const subY = H - subH - 8;
+    const subW = Math.min(W - 24, 740);
+    const subX = Math.floor((W - subW) / 2);
+
+    ctx.save();
+    // Glassmorphic dark backdrop with glowing border
+    this._roundRect(ctx, subX, subY, subW, subH, 10, 'rgba(15, 23, 42, 0.95)', '#0ea5e9', 1.5);
+
+    // Speaker indicator icon
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillStyle = '#38BDF8';
+    ctx.fillText('💬 [LECTURE]:', subX + 14, subY + 19);
+
+    // Subtitle text (wrapped cleanly across 2 lines)
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#F8FAFC';
+
+    const words = text.split(' ');
+    let line1 = '';
+    let line2 = '';
+    let isLine2 = false;
+    const maxChars = Math.max(30, Math.floor((subW - 130) / 7.5));
+
+    for (const w of words) {
+      if (!isLine2) {
+        if ((line1 + ' ' + w).length < maxChars) {
+          line1 += (line1 ? ' ' : '') + w;
+        } else {
+          isLine2 = true;
+          line2 = w;
+        }
+      } else {
+        if ((line2 + ' ' + w).length < maxChars - 3) {
+          line2 += ' ' + w;
+        } else {
+          line2 += '...';
+          break;
+        }
+      }
+    }
+
+    ctx.fillText(line1, subX + 110, subY + 19);
+    if (line2) {
+      ctx.fillText(line2, subX + 110, subY + 36);
+    }
+    ctx.restore();
   }
 
   // ── PARTICLES ────────────────────────────────────────────────────────────

@@ -55,6 +55,9 @@
         <button class="nav-tab-btn px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-white transition" data-tab="video">
           🎥 AI Video Tutor
         </button>
+        <button class="nav-tab-btn px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-white transition" data-tab="peer">
+          🤝 Peer Exchange
+        </button>
         <button class="nav-tab-btn px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-white transition" data-tab="analytics">
           📊 Telemetry Heatmap
         </button>
@@ -278,6 +281,100 @@
     <!-- TAB: VIDEO TUTOR & ADAPTIVE LEARNING -->
     <section id="view-video" class="hidden flex-1">
       <div id="video-tutor-container"></div>
+    </section>
+
+    <!-- TAB: PEER TO PEER KNOWLEDGE EXCHANGE SLIDE & HUB -->
+    <section id="view-peer" class="hidden flex-1 flex flex-col gap-6 animate-fadeIn">
+      <!-- Peer Exchange Header -->
+      <div class="p-6 rounded-2xl bg-gradient-to-r from-indigo-950/80 via-slate-900 to-orange-950/80 border border-indigo-500/30 shadow-2xl flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 text-orange-400 text-xs font-bold border border-orange-500/30 mb-2">
+            <span>🤝</span> REAL PEER-TO-PEER CONNECTING PLATFORM
+          </div>
+          <h2 class="text-2xl font-black text-white">Live Peer Study Rooms & Collaborative Code Hub</h2>
+          <p class="text-xs md:text-sm text-slate-300 max-w-2xl mt-1">
+            Connect live with peers via camera, microphone, pair-programming code sync, whiteboard sketching, and chat.
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btn-tab-live-rooms" class="px-4 py-2 bg-orange-600 text-white font-bold text-xs rounded-xl shadow-lg transition">
+            👥 Live P2P Rooms
+          </button>
+          <button id="btn-tab-mental-models" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition">
+            💡 Mental Models & Video
+          </button>
+          <button id="btn-watch-peer-video" class="px-4 py-2 bg-indigo-950 hover:bg-indigo-900 text-indigo-300 font-bold text-xs rounded-xl border border-indigo-700/60 shadow transition flex items-center gap-1.5">
+            <span>▶</span> Video Lecture
+          </button>
+        </div>
+      </div>
+
+      <!-- CONTAINER 1: REAL-TIME P2P CONNECTING PLATFORM -->
+      <div id="peer-platform-container"></div>
+
+      <!-- CONTAINER 2: COMMUNITY MENTAL MODELS & VIDEO SHOWCASE (Collapsible) -->
+      <div id="peer-community-container" class="hidden space-y-6">
+        <!-- Video Feature Banner -->
+        <div class="p-5 rounded-2xl bg-[#111827] border border-slate-800 grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+          <div class="md:col-span-8 space-y-2">
+            <div class="flex items-center gap-2 text-xs text-orange-400 font-bold uppercase tracking-wider">
+              <span>🎥 Featured Video Lecture</span>
+              <span class="text-slate-600">•</span>
+              <span class="text-slate-400 font-mono">01:20 • 2 Checkpoints • Animated Mesh</span>
+            </div>
+            <h3 class="text-lg font-bold text-white">The Feynman Technique & Decentralized Knowledge Swapping</h3>
+            <p class="text-xs text-slate-300 leading-relaxed">
+              Watch our interactive animated lesson featuring the Feynman Technique, multi-peer mesh networks, and collaborative O(N²) to O(N) code optimizations. Includes mid-lecture understanding checkpoints!
+            </p>
+            <div class="flex flex-wrap gap-2 pt-1 text-[11px]">
+              <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300">💡 Cognitive Articulation</span>
+              <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300">🕸️ Mesh Network Model</span>
+              <span class="px-2.5 py-1 rounded-lg bg-slate-900 border border-slate-700 text-slate-300">⚡ Code Review Feedback</span>
+            </div>
+          </div>
+          <div class="md:col-span-4 flex flex-col gap-2">
+            <button id="btn-start-peer-video-banner" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg flex items-center justify-center gap-2 transition">
+              <span>🚀</span> Launch Interactive Video Tutor
+            </button>
+            <span class="text-[10px] text-center text-slate-400">Includes synchronized voice narration & live subtitles</span>
+          </div>
+        </div>
+
+        <!-- Peer Community Exchange Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+          <!-- Left: Upvoted Mental Models & Tips -->
+          <div class="md:col-span-8 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <span>💡</span> Top Community Mental Models & Analogies
+              </h3>
+              <span class="text-xs text-slate-400">4 Active Models</span>
+            </div>
+
+            <div id="peer-models-list" class="space-y-3">
+              <!-- Dynamic model cards will be populated here -->
+            </div>
+          </div>
+
+          <!-- Right: Submit Your Mental Model -->
+          <div class="md:col-span-4 space-y-4">
+            <!-- Submit Model Box -->
+            <div class="p-4 rounded-xl bg-[#111827] border border-slate-800 space-y-3">
+              <h4 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                <span>✏️</span> Share Your Mental Model
+              </h4>
+              <p class="text-[11px] text-slate-400">
+                Have an intuitive way to understand a tough coding topic? Share it with your peers!
+              </p>
+              <input id="input-peer-title" type="text" placeholder="Concept (e.g. Recursion, Two Pointers)" class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-orange-500" />
+              <textarea id="input-peer-analogy" rows="3" placeholder="Describe your visual metaphor or peer tip in simple words..." class="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-xs text-white focus:outline-none focus:border-orange-500"></textarea>
+              <button id="btn-submit-peer-model" class="w-full py-2 bg-orange-600 hover:bg-orange-500 text-white font-bold text-xs rounded-lg transition shadow">
+                🚀 Post to Peer Exchange Board
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
 
     <!-- TAB: AUTHENTICATION & LOGIN PAGE (Initial Landing Screen) -->
@@ -629,6 +726,7 @@
   <script src="js/visualizers.js"></script>
   <script src="js/canvasVideo.js"></script>
   <script src="js/videoTutor.js"></script>
+  <script src="js/peerPlatform.js"></script>
   <script src="js/app.js"></script>
 
 </body>

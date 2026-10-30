@@ -33,6 +33,43 @@ const sessionStore = {
   }
 };
 
+// In-Memory Real-Time Peer-to-Peer Connecting Platform Rooms & WebRTC Signaling
+const peerRooms = {
+  'recursion-stack': {
+    id: 'recursion-stack',
+    title: 'Recursion & Call Stack Lab',
+    topic: 'Recursion & Stack Frames',
+    code: '# Collaborative Pair Programming\n# Topic: Recursion & The Base Case\n\ndef factorial(n):\n    # 💡 Peer Tip: Base case stops infinite memory expansion\n    if n <= 1:\n        return 1\n    return n * factorial(n - 1)\n\nprint("factorial(5) =", factorial(5))\n',
+    peers: [],
+    messages: [
+      { id: 'm_0', sender: 'System', avatar: '🤖', text: 'Welcome to Recursion & Call Stack Lab! Live pair-programming and video room is open.', time: 'Just now', type: 'system' }
+    ],
+    signals: {}
+  },
+  'two-pointers': {
+    id: 'two-pointers',
+    title: 'Two-Pointer & Array Optimization',
+    topic: 'Two Pointers O(N)',
+    code: '# Collaborative Pair Programming\n# Topic: Two Pointers O(N) Hash Map Lookup\n\ndef two_sum(nums, target):\n    seen = {}  # Store number -> index\n    for i, num in enumerate(nums):\n        diff = target - num\n        if diff in seen:\n            return [seen[diff], i]\n        seen[num] = i\n    return []\n\nprint("two_sum([2, 7, 11, 15], 9) =", two_sum([2, 7, 11, 15], 9))\n',
+    peers: [],
+    messages: [
+      { id: 'm_0', sender: 'System', avatar: '🤖', text: 'Welcome to Two-Pointer Room! Compare O(N^2) brute force vs O(N) linear time.', time: 'Just now', type: 'system' }
+    ],
+    signals: {}
+  },
+  'python-data': {
+    id: 'python-data',
+    title: 'Python Data Structures & OOP',
+    topic: 'Classes, Dictionaries & Lists',
+    code: '# Collaborative Pair Programming\n# Topic: Classes & Dictionaries\n\nclass Student:\n    def __init__(self, name, score):\n        self.name = name\n        self.score = score\n\n    def get_summary(self):\n        return f"{self.name}: {self.score}/100"\n\ns = Student("Alice", 98)\nprint(s.get_summary())\n',
+    peers: [],
+    messages: [
+      { id: 'm_0', sender: 'System', avatar: '🤖', text: 'Welcome to Python Data Structures Room! Share object-oriented code snippets.', time: 'Just now', type: 'system' }
+    ],
+    signals: {}
+  }
+};
+
 // MIME types for static assets
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -445,9 +482,14 @@ const server = http.createServer((req, res) => {
             py_exceptions:  { q1: 'B', q2: 'B' },
             py_exceptions_simple: { q1_simple: 'B' },
             py_fileio:      { q1: 'B', q2: 'B' },
-            py_fileio_simple: { q1_simple: 'B' }
+            py_fileio_simple: { q1_simple: 'B' },
+            peer_knowledge_exchange: { q1_peer: 'B', q2_peer: 'A' },
+            peer_knowledge_exchange_simple: { q1_peer_simple: 'A' }
           };
           const conceptMap = {
+            q1_peer: { peer_knowledge_exchange: ['peer_feynman','Feynman Active Articulation'] },
+            q2_peer: { peer_knowledge_exchange: ['peer_critique','Constructive Code Review'] },
+            q1_peer_simple: { peer_knowledge_exchange_simple: ['peer_buddy','Study Buddy Verbalizing'] },
             q1: { py_variables: ['py_str_type','String Data Type Recognition'], py_conditions: ['py_indentation','Python Indentation & Block Scope'], py_loops: ['py_range_zero','Zero-Based range() Indexing'], py_functions: ['py_params_args','Parameters vs Arguments'], py_lists: ['py_negative_index','Negative List Indexing'], py_dicts: ['py_dict_key_access','Dictionary Key-Based Access'], py_classes: ['py_init_call','__init__ Constructor Call'], py_exceptions: ['py_except_trigger','except Conditional Execution'], py_fileio: ['py_write_overwrite','Write Mode File Truncation'] },
             q2: { py_variables: ['py_type_conversion','Type Casting'], py_conditions: ['py_elif_skip','Short-Circuit Branch'], py_loops: ['py_loop_var','Loop Variable Assignment'], py_functions: ['py_return_none','return vs print'], py_lists: ['py_list_mutability','List append() Mutation'], py_dicts: ['py_key_error','KeyError on Missing Keys'], py_classes: ['py_self_meaning','self as Instance Reference'], py_exceptions: ['py_finally','finally Block Guarantee'], py_fileio: ['py_with_block','Context Manager Auto-Close'] },
             q1_simple: { py_variables_simple: ['py_str_type','Jar-Type Matching'], py_conditions_simple: ['py_elif_skip','Traffic Light Priority'], py_loops_simple: ['py_range_zero','Conveyor Belt Zero-Start'], py_functions_simple: ['py_return_none','Vending Machine Dispense'], py_lists_simple: ['py_negative_index','Skeleton Key -1'], py_dicts_simple: ['py_dict_key_access','Phone Book Name Lookup'], py_classes_simple: ['py_self_meaning','Cookie Independence'], py_exceptions_simple: ['py_except_trigger','Safety Net Logic'], py_fileio_simple: ['py_write_overwrite','Write Mode Shredding'] }
@@ -615,6 +657,201 @@ const server = http.createServer((req, res) => {
           session: sessionStore,
           recentLogs: sessionStore.telemetryLogs.slice(-50)
         }));
+        return;
+      }
+
+      // 4B. REAL PEER-TO-PEER CONNECTING PLATFORM ENDPOINTS
+      // List active peer study rooms
+      if (pathname === '/api/peer/rooms' && req.method === 'GET') {
+        const roomsSummary = Object.keys(peerRooms).map(k => {
+          const r = peerRooms[k];
+          return {
+            id: r.id,
+            title: r.title,
+            topic: r.topic,
+            peerCount: r.peers.length,
+            peers: r.peers.map(p => ({ id: p.id, name: p.name, avatar: p.avatar, micOn: p.micOn, camOn: p.camOn }))
+          };
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success', rooms: roomsSummary }));
+        return;
+      }
+
+      // Join a peer room
+      if (pathname === '/api/peer/join' && req.method === 'POST') {
+        const { roomId = 'recursion-stack', peerId, peerName = 'Learner', peerAvatar = '👨‍💻' } = data;
+        let room = peerRooms[roomId];
+        if (!room) {
+          room = {
+            id: roomId,
+            title: 'Custom Study Room: ' + roomId,
+            topic: 'Collaborative Coding',
+            code: '# Custom Peer Collaboration Room\n\ndef solution():\n    pass\n',
+            peers: [],
+            messages: [
+              { id: 'm_' + Date.now(), sender: 'System', avatar: '🤖', text: 'Room created. Waiting for peer connections...', time: 'Just now', type: 'system' }
+            ],
+            signals: {}
+          };
+          peerRooms[roomId] = room;
+        }
+
+        // Clean up peer if already exists
+        room.peers = room.peers.filter(p => p.id !== peerId);
+        const newPeer = {
+          id: peerId,
+          name: peerName,
+          avatar: peerAvatar,
+          micOn: true,
+          camOn: true,
+          lastSeen: Date.now()
+        };
+        room.peers.push(newPeer);
+
+        // System join message
+        room.messages.push({
+          id: 'm_' + Date.now(),
+          sender: 'System',
+          avatar: '👋',
+          text: `${peerName} connected to the peer room!`,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          type: 'join'
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'success',
+          room: {
+            id: room.id,
+            title: room.title,
+            topic: room.topic,
+            code: room.code,
+            peers: room.peers,
+            messages: room.messages.slice(-50)
+          }
+        }));
+        return;
+      }
+
+      // Leave a peer room
+      if (pathname === '/api/peer/leave' && req.method === 'POST') {
+        const { roomId, peerId } = data;
+        if (peerRooms[roomId]) {
+          const departing = peerRooms[roomId].peers.find(p => p.id === peerId);
+          peerRooms[roomId].peers = peerRooms[roomId].peers.filter(p => p.id !== peerId);
+          if (departing) {
+            peerRooms[roomId].messages.push({
+              id: 'm_' + Date.now(),
+              sender: 'System',
+              avatar: '👋',
+              text: `${departing.name} left the room.`,
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              type: 'leave'
+            });
+          }
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success' }));
+        return;
+      }
+
+      // Sync room state (code, peer status, recent messages)
+      if (pathname === '/api/peer/sync' && req.method === 'POST') {
+        const { roomId, peerId, code, cursorLine, micOn, camOn } = data;
+        const room = peerRooms[roomId];
+        if (!room) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'error', message: 'Room not found' }));
+          return;
+        }
+
+        // Update peer status
+        const currentP = room.peers.find(p => p.id === peerId);
+        if (currentP) {
+          currentP.lastSeen = Date.now();
+          if (typeof micOn === 'boolean') currentP.micOn = micOn;
+          if (typeof camOn === 'boolean') currentP.camOn = camOn;
+          if (typeof cursorLine === 'number') currentP.cursorLine = cursorLine;
+        }
+
+        // Update code if changed
+        if (typeof code === 'string' && code !== room.code) {
+          room.code = code;
+        }
+
+        // Prune inactive peers (older than 30s)
+        const now = Date.now();
+        room.peers = room.peers.filter(p => now - (p.lastSeen || now) < 30000);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          status: 'success',
+          code: room.code,
+          peers: room.peers,
+          messages: room.messages.slice(-50)
+        }));
+        return;
+      }
+
+      // Send a peer chat message or code snippet
+      if (pathname === '/api/peer/message' && req.method === 'POST') {
+        const { roomId, peerId, sender, avatar = '🧑‍💻', text, snippet = null, type = 'chat' } = data;
+        const room = peerRooms[roomId];
+        if (!room) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'error', message: 'Room not found' }));
+          return;
+        }
+
+        const newMsg = {
+          id: 'm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+          sender,
+          avatar,
+          text,
+          snippet,
+          type,
+          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        };
+        room.messages.push(newMsg);
+        if (room.messages.length > 60) room.messages.shift();
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success', message: newMsg }));
+        return;
+      }
+
+      // WebRTC Signaling: post offer, answer, or ice candidate
+      if (pathname === '/api/peer/signal' && req.method === 'POST') {
+        const { roomId, fromPeerId, toPeerId, signal } = data;
+        const room = peerRooms[roomId];
+        if (!room) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'error', message: 'Room not found' }));
+          return;
+        }
+
+        if (!room.signals) room.signals = {};
+        if (!room.signals[toPeerId]) room.signals[toPeerId] = [];
+        room.signals[toPeerId].push({ fromPeerId, signal, time: Date.now() });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success' }));
+        return;
+      }
+
+      // WebRTC Signaling: fetch signals addressed to this peer
+      if (pathname === '/api/peer/signals' && req.method === 'GET') {
+        const roomId = parsedUrl.query.roomId;
+        const peerId = parsedUrl.query.peerId;
+        const room = peerRooms[roomId];
+        let pending = [];
+        if (room && room.signals && room.signals[peerId]) {
+          pending = room.signals[peerId];
+          room.signals[peerId] = []; // clear after reading
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success', signals: pending }));
         return;
       }
 

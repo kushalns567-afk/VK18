@@ -46,7 +46,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize Video Tutor Engine
   const videoTutor = new window.VideoTutorEngine({ containerId: 'video-tutor-container' });
+  window.videoTutorInstance = videoTutor;
   videoTutor.init();
+
+  // Initialize Real Peer-to-Peer Connecting Platform
+  let peerPlatform = null;
+  if (window.PeerPlatformManager) {
+    peerPlatform = new window.PeerPlatformManager({ containerId: 'peer-platform-container' });
+    window.peerPlatformInstance = peerPlatform;
+    peerPlatform.init();
+  }
 
   // Initialize Telemetry Engine
   const telemetry = new window.TelemetryCollector({
@@ -781,6 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const views = {
       workspace: document.getElementById('view-workspace'),
       video: document.getElementById('view-video'),
+      peer: document.getElementById('view-peer'),
       analytics: document.getElementById('view-analytics'),
       login: document.getElementById('view-login')
     };
@@ -795,6 +805,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (tabId === 'video') {
       videoTutor.render();
+    } else if (tabId === 'peer') {
+      renderPeerView();
     } else if (tabId === 'analytics') {
       renderAnalyticsView();
     }
@@ -803,6 +815,171 @@ document.addEventListener('DOMContentLoaded', () => {
   // Hook up IDE "Watch Video Lesson" button
   document.getElementById('btn-open-video-tutor')?.addEventListener('click', () => {
     switchTab('video');
+  });
+
+  // 10B. PEER-TO-PEER KNOWLEDGE EXCHANGE CONTROLLER
+  const peerCommunityModels = [
+    {
+      id: 1,
+      title: 'Recursion as Russian Nesting Dolls',
+      concept: 'Recursion & Algorithms',
+      author: 'Sarah K. (Senior Peer)',
+      analogy: 'Opening doll 4 reveals doll 3, then doll 2, until you reach the solid baby doll at the center. The solid baby doll is your Base Case — without it, the table collapses under infinite dolls!',
+      upvotes: 48,
+      tags: ['Recursion', 'Base Case', 'Call Stack']
+    },
+    {
+      id: 2,
+      title: 'Two Pointers as Sliding Bookmarks',
+      concept: 'Array & Two-Sum Optimization',
+      author: 'Leo M. (Peer Mentor)',
+      analogy: 'Imagine two bookmarks at both ends of a sorted dictionary. If the word sum is too high, pull the right bookmark inwards. If too low, push the left bookmark forward. Zero wasted comparisons!',
+      upvotes: 39,
+      tags: ['Two Pointers', 'O(N)', 'Optimization']
+    },
+    {
+      id: 3,
+      title: 'Python Variables as Kitchen Jars with Labels',
+      concept: 'Variables & Data Types',
+      author: 'David R. (Python Tutor)',
+      analogy: 'The jar is the memory address, the sticky note is the variable name (e.g. "sugar"), and what you pour inside is the value. You can change what is inside the jar at any time!',
+      upvotes: 31,
+      tags: ['Python', 'Variables', 'Memory']
+    },
+    {
+      id: 4,
+      title: 'Python Dictionaries as a Real Phonebook',
+      concept: 'Hash Maps & Key-Value Lookups',
+      author: 'Priya N. (Peer Reviewer)',
+      analogy: 'Instead of looking people up by page number 0, 1, 2 (like lists), you look them up directly by their name ("Alice"). Looking up a name takes instant O(1) time!',
+      upvotes: 27,
+      tags: ['Python', 'Dictionaries', 'O(1) Hash Map']
+    }
+  ];
+
+  function renderPeerView() {
+    // Mode toggle between Live P2P Rooms & Mental Models
+    const btnLiveRooms = document.getElementById('btn-tab-live-rooms');
+    const btnMentalModels = document.getElementById('btn-tab-mental-models');
+    const platformContainer = document.getElementById('peer-platform-container');
+    const communityContainer = document.getElementById('peer-community-container');
+
+    btnLiveRooms?.addEventListener('click', () => {
+      btnLiveRooms.className = 'px-4 py-2 bg-orange-600 text-white font-bold text-xs rounded-xl shadow-lg transition';
+      if (btnMentalModels) btnMentalModels.className = 'px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition';
+      platformContainer?.classList.remove('hidden');
+      communityContainer?.classList.add('hidden');
+    });
+
+    btnMentalModels?.addEventListener('click', () => {
+      btnMentalModels.className = 'px-4 py-2 bg-orange-600 text-white font-bold text-xs rounded-xl shadow-lg transition';
+      if (btnLiveRooms) btnLiveRooms.className = 'px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs rounded-xl border border-slate-700 transition';
+      communityContainer?.classList.remove('hidden');
+      platformContainer?.classList.add('hidden');
+      renderCommunityModels();
+    });
+
+    renderCommunityModels();
+  }
+
+  function renderCommunityModels() {
+    const list = document.getElementById('peer-models-list');
+    if (!list) return;
+
+    list.innerHTML = peerCommunityModels.map(m => `
+      <div class="p-4 rounded-xl bg-[#111827] border border-slate-800 hover:border-indigo-500/40 transition shadow-lg space-y-2">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 text-[10px] font-bold border border-indigo-500/30">
+              ${m.concept}
+            </span>
+            <span class="text-xs text-slate-400 font-mono">by ${m.author}</span>
+          </div>
+          <button class="btn-upvote-peer px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-xs text-amber-400 border border-slate-700 flex items-center gap-1.5 transition" data-id="${m.id}">
+            <span>▲ Upvote</span>
+            <strong class="text-white">${m.upvotes}</strong>
+          </button>
+        </div>
+        <h4 class="text-sm font-bold text-white">${m.title}</h4>
+        <p class="text-xs text-slate-300 leading-relaxed bg-slate-950/60 p-3 rounded-lg border border-slate-800/80">
+          "${m.analogy}"
+        </p>
+        <div class="flex items-center justify-between text-[11px] pt-1">
+          <div class="flex items-center gap-1.5">
+            ${m.tags.map(t => `<span class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-400 text-[10px]">${t}</span>`).join('')}
+          </div>
+          <button class="btn-watch-concept-video text-orange-400 hover:text-orange-300 text-xs font-bold transition flex items-center gap-1" data-concept="${m.concept}">
+            <span>▶ Watch Video</span>
+          </button>
+        </div>
+      </div>
+    `).join('');
+
+    // Wire up upvote buttons
+    list.querySelectorAll('.btn-upvote-peer').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = parseInt(btn.getAttribute('data-id'), 10);
+        const item = peerCommunityModels.find(m => m.id === id);
+        if (item) {
+          item.upvotes++;
+          renderCommunityModels();
+        }
+      });
+    });
+
+    // Wire up concept video buttons
+    list.querySelectorAll('.btn-watch-concept-video').forEach(btn => {
+      btn.addEventListener('click', () => {
+        launchPeerVideo();
+      });
+    });
+  }
+
+  function launchPeerVideo() {
+    switchTab('video');
+    // Peer lesson is index 0
+    if (window.videoTutorInstance) {
+      window.videoTutorInstance.switchLesson(0);
+      window.videoTutorInstance.play();
+    }
+  }
+
+  // Hook up Launch Peer Video buttons
+  document.getElementById('btn-watch-peer-video')?.addEventListener('click', launchPeerVideo);
+  document.getElementById('btn-start-peer-video-banner')?.addEventListener('click', launchPeerVideo);
+
+  // Hook up Submit Model Form
+  document.getElementById('btn-submit-peer-model')?.addEventListener('click', () => {
+    const titleInput = document.getElementById('input-peer-title');
+    const analogyInput = document.getElementById('input-peer-analogy');
+    const title = titleInput?.value.trim();
+    const analogy = analogyInput?.value.trim();
+
+    if (!title || !analogy) {
+      alert('Please enter both a concept title and your mental model description!');
+      return;
+    }
+
+    peerCommunityModels.unshift({
+      id: Date.now(),
+      title: title,
+      concept: 'Community Contribution',
+      author: 'You (Active Peer)',
+      analogy: analogy,
+      upvotes: 1,
+      tags: ['Peer Tip', 'Community']
+    });
+
+    titleInput.value = '';
+    analogyInput.value = '';
+    renderPeerView();
+  });
+
+  // Hook up Join Room buttons
+  document.querySelectorAll('.btn-join-room').forEach(btn => {
+    btn.addEventListener('click', () => {
+      alert('Joined Peer Room! Connecting audio/video data channel with active peers...');
+    });
   });
 
   // 11. ANALYTICS & HEATMAP VIEW

@@ -27,6 +27,93 @@ class VideoTutorEngine {
     // Lessons catalog with Paired Teaching Strategies
     // Demonstrating Hurdle 52: "Change the Teaching, Not the Words"
     this.lessons = [
+      // 0. FEATURED: Peer-to-Peer Knowledge Exchange (Collaborative Problem Solving & Review)
+      {
+        id: "peer_knowledge_exchange",
+        strategyType: "STANDARD",
+        pairedSimplerId: "peer_knowledge_exchange_simple",
+        strategyBadge: "🤝 Peer Exchange Track: Collaborative Mastery",
+        title: "Lesson: Peer-to-Peer Knowledge Exchange",
+        subtitle: "How peer teaching, code reviews, and swapping mental models creates collective mastery",
+        category: "Collaborative Learning & Peer Exchange",
+        videoAvatar: "👩‍🏫 Professor Ada & Peer Mentors",
+        durationSec: 80,
+        timeline: [
+          { time: 0, title: "The Feynman Technique: Teaching to Learn", slideText: "Explaining code to a peer forces you to articulate implicit assumptions and instantly exposes hidden gaps." },
+          { time: 20, title: "The Decentralized Peer Network", slideText: "Learners exchange mental models, edge-case tests, and optimization strategies in real time." },
+          { time: 40, title: "Checkpoint 1: The Teaching Paradox", isCheckpoint: true, checkpointId: "q1_peer" },
+          { time: 55, title: "Collaborative Debugging & Edge Cases", slideText: "Reviewing peer code trains you to anticipate runtime crashes before running the compiler." },
+          { time: 70, title: "Checkpoint 2: Actionable Peer Feedback", isCheckpoint: true, checkpointId: "q2_peer" },
+          { time: 75, title: "Summary: Collective Intelligence", slideText: "Two minds conquer debugging twice as fast. Learn, explain, critique, master!" }
+        ],
+        narration: [
+          "Welcome to our session on Peer-to-Peer Knowledge Exchange! Learning science shows that the single most effective way to master algorithms is to teach them to another person.",
+          "In a peer network, every learner brings a distinct perspective. One student shares an intuitive visual analogy, while another spots an asymptotic optimization.",
+          "When you review a peer's solution, you test boundary conditions together. This collaborative debugging builds deep metacognitive problem solving skills.",
+          "By trading insights and feedback, the entire group levels up together through decentralized collective intelligence."
+        ],
+        questions: {
+          q1_peer: {
+            title: "In-Video Checkpoint 1 (Time 0:40)",
+            question: "According to the Feynman Technique, why does explaining code to a peer produce deeper understanding than re-reading documentation alone?",
+            options: [
+              { key: "A", text: "Because your peer will always fix the code for you" },
+              { key: "B", text: "It forces you to articulate your mental model, which immediately exposes any incomplete logic or hidden gaps", isCorrect: true },
+              { key: "C", text: "Because documentation is always wrong" }
+            ],
+            gapId: "peer_feynman_articulation",
+            gapConcept: "Peer Articulation & Self-Diagnosis"
+          },
+          q2_peer: {
+            title: "In-Video Checkpoint 2 (Time 1:10)",
+            question: "When conducting a peer code review on an algorithm that fails on large test cases, which feedback is most constructive?",
+            options: [
+              { key: "A", text: "Guide the peer to analyze the time complexity of their nested loops and suggest an O(N) single-pass approach", isCorrect: true },
+              { key: "B", text: "Tell them their code is broken and rewrite it yourself" },
+              { key: "C", text: "Advise them to ignore large inputs since small inputs work" }
+            ],
+            gapId: "peer_review_constructive",
+            gapConcept: "Constructive Algorithmic Critique"
+          }
+        }
+      },
+
+      // 0B. SIMPLIFIED TRACK: Study Buddy Knowledge Swap
+      {
+        id: "peer_knowledge_exchange_simple",
+        strategyType: "SIMPLIFIED",
+        pairedStandardId: "peer_knowledge_exchange",
+        strategyBadge: "💡 Simpler Track: Study Buddy Knowledge Swap",
+        title: "Peer Exchange (Simpler): Study Buddy Knowledge Swap",
+        subtitle: "How talking through a problem with a friend makes hard code feel easy",
+        category: "Collaborative Learning (Simpler Track)",
+        videoAvatar: "🤝 Study Buddy Sam",
+        durationSec: 50,
+        timeline: [
+          { time: 0, title: "Rubber Ducking & Talking to a Friend", slideText: "Just explaining your thought process out loud to a friend often sparks the solution before you even finish talking." },
+          { time: 18, title: "Swapping Mental Metaphors", slideText: "If one friend thinks in math formulas and the other thinks in Russian Dolls, both gain a superpower." },
+          { time: 35, title: "Checkpoint: The Two-Brain Advantage", isCheckpoint: true, checkpointId: "q1_peer_simple" },
+          { time: 42, title: "Summary: Nobody Learns Alone", slideText: "Ask questions, share your mental models, and celebrate breakthroughs together!" }
+        ],
+        narration: [
+          "Hey there! Have you ever been totally stuck on a puzzle, and the moment you explained it to a friend, the answer popped right into your head?",
+          "That is the power of peer exchange! When two friends swap their unique mental pictures, complex problems become simple games."
+        ],
+        questions: {
+          q1_peer_simple: {
+            title: "Simpler Peer Checkpoint",
+            question: "Why does explaining a problem to a study buddy help you find your own mistakes?",
+            options: [
+              { key: "A", text: "Talking out loud slows down your thinking and lets your brain spot errors it missed when silently staring at the screen", isCorrect: true },
+              { key: "B", text: "Because your friend does all the homework" },
+              { key: "C", text: "It only helps if your friend is a professional programmer" }
+            ],
+            gapId: "peer_talking_clarity",
+            gapConcept: "Verbalizing Thought Process"
+          }
+        }
+      },
+
       // 1. STANDARD TRACK: Recursion (Abstract Code & Memory Stack Frames)
       {
         id: "recursion",
@@ -1122,7 +1209,7 @@ class VideoTutorEngine {
                 </div>
 
                 <!-- Animated Canvas Video Player -->
-                <canvas id="lesson-video-canvas" class="w-full" style="display:block; background:#0f172a; border-radius:8px; min-height:280px;"></canvas>
+                <canvas id="lesson-video-canvas" width="800" height="380" class="w-full" style="display:block; background:#0f172a; border-radius:8px; aspect-ratio:16/9; max-height:380px;"></canvas>
 
                 <!-- Audio Waveform (shown when playing) -->
                 <div id="audio-waveform-box" class="hidden flex items-center justify-center gap-1.5 h-6 mt-2">
@@ -1288,8 +1375,10 @@ class VideoTutorEngine {
       this.videoEngine = new CanvasVideoEngine('lesson-video-canvas');
       // Draw the title/idle frame immediately
       const currentLesson = this.lessons[this.currentLessonIndex];
+      const initialSub = (currentLesson.narration && currentLesson.narration[0]) || currentLesson.timeline[0]?.slideText || currentLesson.title;
+      this.videoEngine.setSubtitle(initialSub);
       this.videoEngine.start(currentLesson.id, 0);
-      this.videoEngine.stop(); // pause immediately — just shows idle frame
+      this.videoEngine.stop(); // pause immediately — shows idle frame with subtitle
     }
 
     // Resize canvas on window resize
@@ -1386,9 +1475,14 @@ class VideoTutorEngine {
       this.videoEngine.start(lesson.id, this.currentTimeSec);
     }
 
-    // Narrate chapter aloud if voice enabled
-    if (this.voiceEnabled && this.currentTimeSec === 0) {
-      this.speakText(lesson.narration[0]);
+    // Resolve initial narration text
+    const initialStep = lesson.timeline.find(t => !t.isCheckpoint && this.currentTimeSec >= t.time);
+    const initialText = (lesson.narration && lesson.narration[0]) || (initialStep && initialStep.slideText) || lesson.title;
+
+    // Narrate starting chapter if at beginning
+    if (this.currentTimeSec === 0) {
+      if (this.videoEngine) this.videoEngine.setSubtitle(initialText);
+      if (this.voiceEnabled) this.speakText(initialText);
     }
 
     // Timer loop for video progress — checkpoint keys are dynamic per lesson
@@ -1404,6 +1498,18 @@ class VideoTutorEngine {
     this.animationTimer = setInterval(() => {
       this.currentTimeSec += 1;
       this.updateVideoProgress();
+
+      // Check for chapter narration triggers in the timeline
+      const currentStep = lesson.timeline.find(t => t.time === this.currentTimeSec);
+      if (currentStep && !currentStep.isCheckpoint) {
+        const nonCheckpointSteps = lesson.timeline.filter(t => !t.isCheckpoint);
+        const stepIdx = nonCheckpointSteps.indexOf(currentStep);
+        const textToNarrate = (lesson.narration && lesson.narration[stepIdx]) || currentStep.slideText || currentStep.title;
+        if (textToNarrate) {
+          if (this.videoEngine) this.videoEngine.setSubtitle(textToNarrate);
+          if (this.voiceEnabled) this.speakText(textToNarrate);
+        }
+      }
 
       // Sync canvas video engine to current time
       if (this.videoEngine) this.videoEngine.seekTo(this.currentTimeSec);
@@ -1491,6 +1597,10 @@ class VideoTutorEngine {
     if (!modal) return;
 
     modal.classList.remove('hidden');
+
+    if (this.videoEngine) {
+      this.videoEngine.setSubtitle(`📍 Checkpoint Question: ${questionData.title} — ${questionData.question}`);
+    }
 
     // Announce checkpoint
     if (this.voiceEnabled) {
@@ -1932,94 +2042,80 @@ class VideoTutorEngine {
 
   // SPEECH SYNTHESIS ENGINE
   speakText(text) {
-    if (!('speechSynthesis' in window) || !this.voiceEnabled) return;
-    window.speechSynthesis.cancel();
+    if (!('speechSynthesis' in window) || !this.voiceEnabled || !text) return;
 
-    // Clear any existing keep-alive ping to avoid stacking
-    if (this._speechKeepAlive) {
-      clearInterval(this._speechKeepAlive);
-      this._speechKeepAlive = null;
+    if (this.videoEngine) {
+      this.videoEngine.setSubtitle(text);
     }
 
-    // Split into sentence-sized chunks to avoid Chrome/Edge 10-second cutoff bug.
-    // Chrome silently kills utterances longer than ~14s on some platforms.
-    const sentences = text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
-    const chunks = [];
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {}
 
-    // Group sentences into chunks of max ~180 chars so each chunk stays under ~12s
-    let current = '';
-    for (const s of sentences) {
-      if ((current + s).length > 180) {
-        if (current.trim()) chunks.push(current.trim());
-        current = s;
-      } else {
-        current += s;
-      }
-    }
-    if (current.trim()) chunks.push(current.trim());
+    // Clean text of emojis / symbols for cleaner SpeechSynthesis pronunciation
+    const cleanText = text.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}🐍🪆❌✅]/gu, '').trim();
+    if (!cleanText) return;
 
+    // Split into clear sentence-sized chunks so each stays under 6-8 seconds
+    const sentences = cleanText.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [cleanText];
     let chunkIndex = 0;
 
     const speakChunk = () => {
-      if (chunkIndex >= chunks.length || !this.voiceEnabled) {
-        // All done — remove pulse badge
-        clearInterval(this._speechKeepAlive);
-        this._speechKeepAlive = null;
+      if (chunkIndex >= sentences.length || !this.voiceEnabled) {
         const badge = document.getElementById('avatar-speaker-badge');
         if (badge) badge.classList.remove('ring-4', 'ring-cyan-400', 'animate-pulse');
         return;
       }
 
-      const utt = new SpeechSynthesisUtterance(chunks[chunkIndex]);
+      const chunk = sentences[chunkIndex].trim();
+      if (!chunk) {
+        chunkIndex++;
+        speakChunk();
+        return;
+      }
+
+      const utt = new SpeechSynthesisUtterance(chunk);
       utt.rate = 1.0;
       utt.pitch = 1.05;
-      this.speechUtterance = utt;
 
-      if (chunkIndex === 0) {
-        utt.onstart = () => {
-          const badge = document.getElementById('avatar-speaker-badge');
-          if (badge) badge.classList.add('ring-4', 'ring-cyan-400', 'animate-pulse');
-        };
+      const voices = window.speechSynthesis.getVoices();
+      if (voices && voices.length) {
+        const preferred = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('Samantha') || v.name.includes('Zira') || v.name.includes('David')));
+        if (preferred) utt.voice = preferred;
       }
+
+      utt.onstart = () => {
+        const badge = document.getElementById('avatar-speaker-badge');
+        if (badge) badge.classList.add('ring-4', 'ring-cyan-400', 'animate-pulse');
+        const waveform = document.getElementById('audio-waveform-box');
+        if (waveform) waveform.classList.remove('hidden');
+      };
 
       utt.onend = () => {
         chunkIndex++;
-        speakChunk(); // advance to next chunk
+        speakChunk();
       };
 
       utt.onerror = (e) => {
-        // 'interrupted' happens on cancel() — don't auto-advance
         if (e.error === 'interrupted' || e.error === 'canceled') return;
         chunkIndex++;
         speakChunk();
       };
 
-      window.speechSynthesis.speak(utt);
+      try {
+        window.speechSynthesis.speak(utt);
+      } catch (err) {}
     };
 
-    // Start speaking
-    speakChunk();
-
-    // Keep-alive: Chrome pauses speechSynthesis after ~10s when tab loses focus.
-    // Nudge it every 9 seconds to keep it running.
-    this._speechKeepAlive = setInterval(() => {
-      if (!window.speechSynthesis.speaking) {
-        clearInterval(this._speechKeepAlive);
-        this._speechKeepAlive = null;
-        return;
-      }
-      window.speechSynthesis.pause();
-      window.speechSynthesis.resume();
-    }, 9000);
+    // Small delay ensures previous cancellation completed in browser audio layer
+    setTimeout(speakChunk, 60);
   }
 
   stopSpeaking() {
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-    }
-    if (this._speechKeepAlive) {
-      clearInterval(this._speechKeepAlive);
-      this._speechKeepAlive = null;
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
     }
   }
 
