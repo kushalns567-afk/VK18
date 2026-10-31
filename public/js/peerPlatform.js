@@ -527,9 +527,37 @@ class PeerPlatformManager {
               </button>
             </div>
 
-            <!-- Camera Troubleshooter Helper Banner -->
-            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+            <!-- Mic & Camera Troubleshooter Helper Banner -->
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 space-y-2">
               <div class="flex items-center justify-between text-xs font-semibold text-slate-300">
+                <span class="flex items-center gap-1"><span>🎙️</span> Audio Status</span>
+                <button id="btn-mic-test-toggle" class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 text-[10px] font-bold border border-emerald-500/30 transition">
+                  Test Mic (Echo Check)
+                </button>
+              </div>
+
+              <!-- Inline Mic Test Box (Toggled on click) -->
+              <div id="mic-test-box" class="hidden p-2 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5 text-[10px]">
+                <div class="flex items-center justify-between text-slate-300 font-bold">
+                  <span>Mic Input Level:</span>
+                  <span id="mic-test-level-val" class="text-emerald-400 font-mono">0%</span>
+                </div>
+                <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden border border-slate-700">
+                  <div id="mic-test-bar" class="h-full bg-emerald-400 w-0 transition-all duration-75"></div>
+                </div>
+                <div class="flex items-center justify-between pt-1">
+                  <label class="flex items-center gap-1 cursor-pointer text-slate-300">
+                    <input type="checkbox" id="chk-mic-loopback" class="rounded accent-emerald-500" />
+                    <span>Hear My Voice (Echo Check)</span>
+                  </label>
+                  <button id="btn-force-request-mic" class="px-2 py-0.5 rounded bg-orange-600 hover:bg-orange-500 text-white font-bold text-[9px]">
+                    Re-ask Mic
+                  </button>
+                </div>
+                <p id="mic-diag-status" class="text-slate-400 text-[9px]">Speak now — green bar moves when laptop hears your voice.</p>
+              </div>
+
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-300 pt-1 border-t border-slate-800">
                 <span>📹 Video Status</span>
                 <button id="btn-cam-guide-toggle" class="text-orange-400 hover:underline text-[10px]">Fix Camera on 2nd Laptop</button>
               </div>
@@ -952,6 +980,44 @@ class PeerPlatformManager {
       if (guide) guide.classList.toggle('hidden');
     });
 
+    // Mic Diagnostic & Echo Check
+    const micTestBox = document.getElementById('mic-test-box');
+    const micTestToggle = document.getElementById('btn-mic-test-toggle');
+    const micLoopbackChk = document.getElementById('chk-mic-loopback');
+    const forceRequestBtn = document.getElementById('btn-force-request-mic');
+
+    micTestToggle?.addEventListener('click', async () => {
+      if (micTestBox) {
+        const isHidden = micTestBox.classList.toggle('hidden');
+        if (!isHidden) {
+          if (!this.localStream || this.localStream.getAudioTracks().length === 0) {
+            await this.unlockMicrophone(true);
+          }
+          this.runMicDiagnosticLoop();
+        }
+      }
+    });
+
+    forceRequestBtn?.addEventListener('click', async () => {
+      await this.unlockMicrophone(true);
+      this.runMicDiagnosticLoop();
+    });
+
+    micLoopbackChk?.addEventListener('change', (e) => {
+      this.toggleMicEchoLoopback(e.target.checked);
+    });
+
+    // Unblock browser autoplay on any window click
+    window.addEventListener('click', () => {
+      if (this.remotePcmCtx && this.remotePcmCtx.state === 'suspended') {
+        this.remotePcmCtx.resume().catch(() => {});
+      }
+      const remoteAudio = document.getElementById('peer-remote-audio');
+      if (remoteAudio && remoteAudio.paused && remoteAudio.srcObject) {
+        remoteAudio.play().catch(() => {});
+      }
+    }, { once: false });
+
     // Whiteboard Controls
     document.getElementById('btn-open-whiteboard')?.addEventListener('click', () => this.openWhiteboard());
     document.getElementById('btn-close-whiteboard')?.addEventListener('click', () => this.closeWhiteboard());
@@ -1161,6 +1227,113 @@ class PeerPlatformManager {
       }, 100);
     } catch (e) {
       console.warn('Audio meter initialization notice:', e);
+    }
+  }
+
+  runMicDiagnosticLoop() {
+    const audioTrack = this.localStream ? this.localStream.getAudioTracks()[0] : null;
+    const diagStatus = document.getElementById('mic-diag-status');
+    const meterVal = document.getElementById('mic-test-level-val');
+    const meterBar = document.getElementById('mic-test-bar');
+
+    if (!audioTrack) {
+      if (diagStatus) {
+        diagStatus.textContent = '⚠️ No mic input active. Click "Re-ask Mic" or allow microphone in your address bar.';
+        diagStatus.className = 'text-amber-400 text-[9px] font-bold';
+      }
+      if (meterVal) meterVal.textContent = 'Off';
+      if (meterBar) meterBar.style.width = '0%';
+      return;
+    }
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!this.diagAudioCtx || this.diagAudioCtx.state === 'closed') {
+        this.diagAudioCtx = new AudioCtx();
+      }
+      if (this.diagAudioCtx.state === 'suspended') {
+        this.diagAudioCtx.resume().catch(() => {});
+      }
+
+      if (this.diagAnalyser) {
+        try { this.diagAnalyser.disconnect(); } catch (e) {}
+      }
+
+      const source = this.diagAudioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
+      this.diagAnalyser = this.diagAudioCtx.createAnalyser();
+      this.diagAnalyser.fftSize = 64;
+      source.connect(this.diagAnalyser);
+
+      const dataArray = new Uint8Array(this.diagAnalyser.frequencyBinCount);
+      if (this.diagTimer) clearInterval(this.diagTimer);
+
+      this.diagTimer = setInterval(() => {
+        const box = document.getElementById('mic-test-box');
+        if (!box || box.classList.contains('hidden')) {
+          clearInterval(this.diagTimer);
+          return;
+        }
+
+        this.diagAnalyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const pct = Math.min(100, Math.round((avg / 128) * 100));
+
+        if (meterVal) meterVal.textContent = pct + '%';
+        if (meterBar) {
+          meterBar.style.width = pct + '%';
+          meterBar.className = pct > 10 ? 'h-full bg-emerald-400 transition-all duration-75' : 'h-full bg-slate-600 transition-all duration-75';
+        }
+
+        if (diagStatus) {
+          if (pct > 12) {
+            diagStatus.textContent = '✅ Sound detected! Microphone is actively working and streaming to your peer.';
+            diagStatus.className = 'text-emerald-400 text-[9px] font-bold';
+          } else {
+            diagStatus.textContent = 'Speak now — green bar moves when laptop hears your voice.';
+            diagStatus.className = 'text-slate-400 text-[9px]';
+          }
+        }
+      }, 80);
+    } catch (e) {
+      console.warn('Mic diagnostic error:', e);
+    }
+  }
+
+  toggleMicEchoLoopback(enable) {
+    if (!enable) {
+      if (this.loopbackGain) {
+        try { this.loopbackGain.disconnect(); } catch (e) {}
+        this.loopbackGain = null;
+      }
+      return;
+    }
+
+    const audioTrack = this.localStream ? this.localStream.getAudioTracks()[0] : null;
+    if (!audioTrack) return;
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!this.diagAudioCtx || this.diagAudioCtx.state === 'closed') {
+        this.diagAudioCtx = new AudioCtx();
+      }
+      if (this.diagAudioCtx.state === 'suspended') {
+        this.diagAudioCtx.resume().catch(() => {});
+      }
+
+      const source = this.diagAudioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
+      const delay = this.diagAudioCtx.createDelay(1.0);
+      delay.delayTime.value = 0.25;
+      this.loopbackGain = this.diagAudioCtx.createGain();
+      this.loopbackGain.gain.value = 0.8;
+
+      source.connect(delay);
+      delay.connect(this.loopbackGain);
+      this.loopbackGain.connect(this.diagAudioCtx.destination);
+    } catch (e) {
+      console.warn('Loopback setup note:', e);
     }
   }
 
