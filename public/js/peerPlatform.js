@@ -23,6 +23,23 @@ class PeerPlatformManager {
     this.activeTab = 'editor'; // 'editor' | 'whiteboard'
     this.whiteboardCtx = null;
     this.isDrawing = false;
+    this.frameBroadcastTimer = null;
+    this.framePollTimer = null;
+    this.remoteCandidateQueue = [];
+    this.customLocalPhoto = null;
+    this.captureCanvas = null;
+    this.captureCtx = null;
+    this.ws = null;
+    this.typingTimer = null;
+    this.lastDrawX = 0;
+    this.lastDrawY = 0;
+  }
+
+  generateRandomRoomId() {
+    const prefixes = ['ROOM', 'STUDY', 'PEER', 'ALGO', 'CODE'];
+    const p = prefixes[Math.floor(Math.random() * prefixes.length)];
+    const num = Math.floor(1000 + Math.random() * 9000);
+    return `${p}-${num}`;
   }
 
   init() {
@@ -33,6 +50,8 @@ class PeerPlatformManager {
   renderLobby() {
     const container = document.getElementById(this.containerId);
     if (!container) return;
+
+    const defaultNewRoomId = this.generateRandomRoomId();
 
     container.innerHTML = `
       <div class="space-y-6 animate-fadeIn">
@@ -46,22 +65,98 @@ class PeerPlatformManager {
             </div>
             <h2 class="text-2xl font-black text-white">Live Peer Study Rooms & Collaborative Code</h2>
             <p class="text-xs text-slate-300 max-w-xl leading-relaxed">
-              Connect camera and microphone, pair-program on shared code in real time, and explain mental models using the Feynman technique.
+              Create a custom Room ID to study with a classmate, or join an active lounge to pair-program and share mental models in real time.
             </p>
           </div>
 
-          <div class="flex items-center gap-3">
-            <button id="btn-quick-match" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-xs shadow-lg transition flex items-center gap-2">
-              <span>⚡</span> Quick Match Study Buddy
+          <div class="flex items-center gap-2.5">
+            <button id="btn-quick-create-room" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-xs shadow-lg transition flex items-center gap-2">
+              <span>➕</span> Create a Room ID
+            </button>
+            <button id="btn-quick-match" class="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition flex items-center gap-1.5">
+              <span>⚡</span> Quick Match
             </button>
           </div>
         </div>
 
+        <!-- DEDICATED ROOM ID CREATOR & JOIN SECTION -->
+        <div id="room-creator-section" class="grid grid-cols-1 md:grid-cols-12 gap-5">
+          
+          <!-- OPTION 1: CREATE A ROOM ID -->
+          <div class="md:col-span-7 p-6 rounded-2xl bg-[#111827] border-2 border-orange-500/40 shadow-xl space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div class="flex items-center gap-2.5">
+                <span class="p-2 rounded-xl bg-orange-500/20 text-orange-400 text-base">➕</span>
+                <div>
+                  <h4 class="text-sm font-bold text-white">Create a New Room ID</h4>
+                  <p class="text-[11px] text-slate-400">Instantly generate a private Room ID to share with your peer.</p>
+                </div>
+              </div>
+              <span class="px-2.5 py-1 rounded-full bg-orange-500/20 text-orange-400 text-[10px] font-mono font-bold border border-orange-500/30">
+                Host Room
+              </span>
+            </div>
+
+            <div class="space-y-3.5">
+              <div>
+                <label class="block text-[11px] font-bold text-slate-300 mb-1">Your Generated Room ID:</label>
+                <div class="flex items-center gap-2">
+                  <input id="input-new-generated-room-id" type="text" value="${defaultNewRoomId}" class="flex-1 px-3.5 py-2.5 bg-slate-950 border border-orange-500/60 rounded-xl text-sm font-mono font-black text-orange-400 focus:outline-none" />
+                  <button id="btn-randomize-room-id" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold border border-slate-700 transition flex items-center gap-1" title="Generate another ID">
+                    <span>🎲</span> Randomize
+                  </button>
+                  <button id="btn-copy-generated-room-id" class="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold border border-slate-700 transition flex items-center gap-1" title="Copy Room ID">
+                    <span>📋</span> Copy
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-300 mb-1">Room Title / Topic (Optional):</label>
+                <input id="input-new-room-topic" type="text" placeholder="e.g. Recursion Practice, Two Pointers O(N), Python OOP" class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-orange-500" />
+              </div>
+
+              <button id="btn-create-and-enter-room" class="w-full py-3 bg-gradient-to-r from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+                <span>🚀</span> Create & Enter Room Now
+              </button>
+            </div>
+          </div>
+
+          <!-- OPTION 2: JOIN WITH EXISTING ROOM ID -->
+          <div class="md:col-span-5 p-6 rounded-2xl bg-[#111827] border border-slate-800 shadow-xl space-y-4 flex flex-col justify-between">
+            <div class="space-y-4">
+              <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+                <div class="flex items-center gap-2.5">
+                  <span class="p-2 rounded-xl bg-indigo-500/20 text-indigo-400 text-base">🔗</span>
+                  <div>
+                    <h4 class="text-sm font-bold text-white">Join with Room ID</h4>
+                    <p class="text-[11px] text-slate-400">Have a Room ID from a peer? Paste it below.</p>
+                  </div>
+                </div>
+                <span class="px-2.5 py-1 rounded-full bg-indigo-500/20 text-indigo-400 text-[10px] font-mono font-bold border border-indigo-500/30">
+                  Join Room
+                </span>
+              </div>
+
+              <div>
+                <label class="block text-[11px] font-bold text-slate-300 mb-1">Enter Room ID:</label>
+                <input id="input-join-room-id" type="text" placeholder="e.g. ROOM-4921 or custom name" class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-xs font-mono text-white focus:outline-none focus:border-indigo-500" />
+                <span class="text-[10px] text-slate-500 mt-1 block">Connects directly to the existing session.</span>
+              </div>
+            </div>
+
+            <button id="btn-join-by-room-id" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+              <span>🚀</span> Connect to Peer Room
+            </button>
+          </div>
+
+        </div>
+
         <!-- Available Study Rooms Grid -->
-        <div class="space-y-3">
+        <div class="space-y-3 pt-2">
           <div class="flex items-center justify-between">
             <h3 class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <span>🟢</span> Active Collaborative Study Lounges
+              <span>🟢</span> Or Jump into Public Study Lounges
             </h3>
             <span class="text-xs text-slate-400 font-mono">Real-time WebRTC Enabled</span>
           </div>
@@ -155,27 +250,47 @@ class PeerPlatformManager {
           </div>
         </div>
 
-        <!-- Custom Room Creator Bar -->
-        <div class="p-4 rounded-xl bg-[#111827] border border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div class="flex items-center gap-3">
-            <span class="text-xl">🚪</span>
-            <div>
-              <strong class="text-white block">Create or Join a Private Peer Room</strong>
-              <span class="text-slate-400 text-[11px]">Enter a custom room code to connect with your classmate directly.</span>
-            </div>
-          </div>
-          <div class="flex items-center gap-2">
-            <input id="input-custom-room-code" type="text" placeholder="e.g. room-cs101-algo" class="px-3 py-1.5 bg-slate-950 border border-slate-700 text-white rounded-lg text-xs font-mono focus:outline-none focus:border-orange-500" />
-            <button id="btn-join-custom-room" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-lg transition shadow">
-              Connect
-            </button>
-          </div>
-        </div>
-
       </div>
     `;
 
-    // Wire up room buttons
+    // Wire up Create Room ID options
+    document.getElementById('btn-randomize-room-id')?.addEventListener('click', () => {
+      const input = document.getElementById('input-new-generated-room-id');
+      if (input) input.value = this.generateRandomRoomId();
+    });
+
+    document.getElementById('btn-copy-generated-room-id')?.addEventListener('click', () => {
+      const input = document.getElementById('input-new-generated-room-id');
+      if (input && input.value) {
+        navigator.clipboard?.writeText(input.value);
+        alert('Room ID ' + input.value + ' copied to clipboard! Send it to your peer.');
+      }
+    });
+
+    document.getElementById('btn-create-and-enter-room')?.addEventListener('click', () => {
+      const idInput = document.getElementById('input-new-generated-room-id');
+      const topicInput = document.getElementById('input-new-room-topic');
+      const roomId = idInput?.value.trim() || this.generateRandomRoomId();
+      const topic = topicInput?.value.trim() || 'Custom Peer Collaboration';
+      this.joinRoom(roomId, topic);
+    });
+
+    document.getElementById('btn-quick-create-room')?.addEventListener('click', () => {
+      document.getElementById('room-creator-section')?.scrollIntoView({ behavior: 'smooth' });
+      document.getElementById('input-new-generated-room-id')?.focus();
+    });
+
+    document.getElementById('btn-join-by-room-id')?.addEventListener('click', () => {
+      const input = document.getElementById('input-join-room-id');
+      const roomId = input?.value.trim();
+      if (!roomId) {
+        alert('Please enter a Room ID to join!');
+        return;
+      }
+      this.joinRoom(roomId);
+    });
+
+    // Wire up specific room buttons
     container.querySelectorAll('.btn-join-specific-room').forEach(btn => {
       btn.addEventListener('click', () => {
         const roomId = btn.getAttribute('data-room');
@@ -186,19 +301,10 @@ class PeerPlatformManager {
     document.getElementById('btn-quick-match')?.addEventListener('click', () => {
       this.joinRoom('recursion-stack');
     });
-
-    document.getElementById('btn-join-custom-room')?.addEventListener('click', () => {
-      const code = document.getElementById('input-custom-room-code')?.value.trim();
-      if (!code) {
-        alert('Please enter a room code!');
-        return;
-      }
-      this.joinRoom(code);
-    });
   }
 
   // ── JOIN ROOM & ENTER ACTIVE P2P CALL STAGE ────────────────────────────────
-  async joinRoom(roomId) {
+  async joinRoom(roomId, topic = 'Collaborative Coding') {
     this.currentRoom = roomId;
 
     // Fetch user details from global state if available
@@ -216,7 +322,7 @@ class PeerPlatformManager {
         <div class="inline-block p-4 rounded-full bg-orange-500/10 border border-orange-500/30 text-3xl animate-bounce">
           🤝
         </div>
-        <h3 class="text-xl font-bold text-white">Connecting to Peer Room...</h3>
+        <h3 class="text-xl font-bold text-white">Connecting to Room #${roomId}...</h3>
         <p class="text-xs text-slate-400">Initializing WebRTC media tracks, camera feed, and real-time code synchronization.</p>
         <div class="w-full bg-slate-950 rounded-full h-2 overflow-hidden border border-slate-800">
           <div class="h-full bg-orange-500 rounded-full animate-pulse w-3/4"></div>
@@ -247,7 +353,8 @@ class PeerPlatformManager {
           roomId: this.currentRoom,
           peerId: this.peerId,
           peerName: this.userName,
-          peerAvatar: this.userAvatar
+          peerAvatar: this.userAvatar,
+          topic: topic
         })
       });
       const data = await res.json();
@@ -258,11 +365,11 @@ class PeerPlatformManager {
       console.warn('Peer join offline fallback:', e);
       roomData = {
         id: roomId,
-        title: 'Study Room: ' + roomId,
-        topic: 'Collaborative Coding',
-        code: '# Collaborative Pair Programming\n\ndef solution(n):\n    # Type code here together!\n    pass\n',
+        title: topic || ('Study Room: ' + roomId),
+        topic: topic,
+        code: '# Collaborative Pair Programming\n# Room ID: ' + roomId + '\n\ndef solution(n):\n    # Type code here together!\n    pass\n',
         peers: [{ id: this.peerId, name: this.userName, avatar: this.userAvatar }],
-        messages: [{ id: 'm_0', sender: 'System', text: 'Peer session active.', time: 'Just now', type: 'system' }]
+        messages: [{ id: 'm_0', sender: 'System', text: 'Peer session active for Room #' + roomId, time: 'Just now', type: 'system' }]
       };
     }
 
@@ -288,10 +395,12 @@ class PeerPlatformManager {
               LIVE P2P SESSION
             </span>
             <div>
-              <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                <span>${roomData.title || this.currentRoom}</span>
-                <span class="text-xs text-slate-500 font-mono">#${this.currentRoom}</span>
-              </h3>
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-bold text-white">${roomData.title || ('Room ' + this.currentRoom)}</h3>
+                <span class="px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-mono text-xs font-bold border border-orange-500/30 flex items-center gap-1">
+                  <span>🔑</span> Room ID: <strong id="current-room-id-display">${this.currentRoom}</strong>
+                </span>
+              </div>
               <p class="text-[11px] text-slate-400" id="peer-connection-status">
                 Connected • WebRTC Audio/Video Active • Low Latency (24ms)
               </p>
@@ -300,10 +409,10 @@ class PeerPlatformManager {
 
           <!-- Room Actions -->
           <div class="flex items-center gap-2">
-            <button id="btn-copy-room-link" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium border border-slate-700 transition flex items-center gap-1.5">
-              <span>📋</span> Copy Room Link
+            <button id="btn-copy-room-link" class="px-3.5 py-1.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow transition flex items-center gap-1.5">
+              <span>📋</span> Copy Room ID (${this.currentRoom})
             </button>
-            <button id="btn-leave-peer-room" class="px-3 py-1.5 rounded-lg bg-red-950/80 hover:bg-red-900 text-red-300 text-xs font-bold border border-red-700/60 transition flex items-center gap-1.5">
+            <button id="btn-leave-peer-room" class="px-3.5 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 text-red-300 text-xs font-bold border border-red-700/60 transition flex items-center gap-1.5">
               <span>🚪</span> Leave Session
             </button>
           </div>
@@ -317,8 +426,9 @@ class PeerPlatformManager {
             
             <div class="space-y-3">
               <!-- Remote Peer Video Card -->
-              <div class="relative bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg aspect-video flex items-center justify-center group">
+              <div class="relative bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg aspect-video flex items-center justify-center group" id="peer-remote-card">
                 <video id="peer-remote-video" class="w-full h-full object-cover hidden" autoplay playsinline></video>
+                <img id="peer-remote-stream-img" class="w-full h-full object-cover hidden" alt="Remote Peer Live Stream" />
                 
                 <!-- Remote Peer Simulated Visual Avatar (shown when video not ready) -->
                 <div id="peer-remote-avatar-box" class="flex flex-col items-center justify-center p-4 text-center space-y-2">
@@ -332,22 +442,25 @@ class PeerPlatformManager {
 
                 <div class="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur text-[10px] text-white font-bold flex items-center gap-1">
                   <span>Remote Peer</span>
+                  <span id="remote-live-indicator" class="hidden text-emerald-400 text-[9px] font-bold">● LIVE</span>
                 </div>
               </div>
 
               <!-- Local User Video Card -->
-              <div class="relative bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg aspect-video flex items-center justify-center">
+              <div class="relative bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg aspect-video flex items-center justify-center" id="peer-local-card">
                 <video id="peer-local-video" class="w-full h-full object-cover hidden" autoplay muted playsinline></video>
+                <img id="peer-local-snapshot-img" class="w-full h-full object-cover hidden" alt="Local Snapshot" />
                 
                 <!-- Local Avatar Fallback -->
                 <div id="peer-local-avatar-box" class="flex flex-col items-center justify-center p-3 text-center space-y-1">
-                  <span class="text-3xl block h-12 w-12 rounded-full bg-slate-800 border-2 border-orange-500 flex items-center justify-center">${this.userAvatar}</span>
+                  <span class="text-3xl block h-12 w-12 rounded-full bg-slate-800 border-2 border-orange-500 flex items-center justify-center" id="local-avatar-display">${this.userAvatar}</span>
                   <strong class="text-xs text-white">${this.userName}</strong>
                   <span class="text-[10px] text-slate-400" id="local-mic-badge">🎙️ Mic Active</span>
                 </div>
 
                 <div class="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur text-[10px] text-white font-bold flex items-center gap-1">
                   <span>You (Local)</span>
+                  <span id="local-broadcasting-badge" class="hidden text-orange-400 text-[9px] font-bold">● BROADCASTING</span>
                 </div>
               </div>
             </div>
@@ -360,12 +473,29 @@ class PeerPlatformManager {
               <button id="btn-toggle-cam" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition" title="Toggle Camera">
                 <span id="cam-icon">📹</span>
               </button>
+              <button id="btn-snap-photo" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition" title="Snap Photo / Upload Face (Works on all laptops)">
+                <span>📸</span>
+              </button>
+              <input type="file" id="input-snap-face" accept="image/*" capture="user" class="hidden" />
               <button id="btn-toggle-screen" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition" title="Share Screen">
                 <span>🖥️</span>
               </button>
               <button id="btn-open-whiteboard" class="p-2 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 transition" title="Shared Whiteboard">
                 <span>🎨</span>
               </button>
+            </div>
+
+            <!-- Camera Troubleshooter Helper Banner -->
+            <div class="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px] text-slate-400 space-y-1">
+              <div class="flex items-center justify-between text-xs font-semibold text-slate-300">
+                <span>📹 Video Status</span>
+                <button id="btn-cam-guide-toggle" class="text-orange-400 hover:underline text-[10px]">Fix Camera on 2nd Laptop</button>
+              </div>
+              <div id="cam-guide-content" class="hidden pt-1.5 border-t border-slate-800 text-[10px] text-slate-300 space-y-1">
+                <p>If friend's laptop blocks camera on Wi-Fi:</p>
+                <p class="font-mono bg-slate-950 p-1 rounded text-orange-300 text-[9px] select-all">chrome://flags/#unsafely-treat-insecure-origin-as-secure</p>
+                <p>1. Open that in Chrome on friend's laptop.<br>2. Add <code>http://10.51.233.202:3000</code> & set to Enabled.<br>3. Or simply click <strong>📸 Snap Photo</strong> above!</p>
+              </div>
             </div>
 
           </div>
@@ -471,10 +601,135 @@ class PeerPlatformManager {
         localVid.srcObject = this.localStream;
         localVid.classList.remove('hidden');
         if (localBox) localBox.classList.add('hidden');
+        localVid.play().catch(() => {});
       }
     }
 
+    // Start Real-Time Live Video Broadcaster & Receiver Loops
+    this.startFrameBroadcaster();
+    this.startFrameReceiver();
+
+    // Connect Instant Keystroke & State WebSocket
+    this.initWebSocket();
+
     this.attachActiveRoomEvents();
+  }
+
+  // ── WEBSOCKET CONNECTION & EVENT HANDLERS ─────────────────────────────────
+  initWebSocket() {
+    if (this.ws) {
+      try { this.ws.close(); } catch (e) {}
+      this.ws = null;
+    }
+
+    try {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${proto}//${location.host}/ws/peer?roomId=${encodeURIComponent(this.currentRoom)}&peerId=${encodeURIComponent(this.peerId)}&name=${encodeURIComponent(this.userName)}&avatar=${encodeURIComponent(this.userAvatar)}`;
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.onopen = () => {
+        const statusText = document.getElementById('peer-connection-status');
+        if (statusText) {
+          statusText.textContent = `🟢 Connected • Instant Keystroke WebSocket (<5ms) • WebRTC Audio/Video Active`;
+        }
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.handleWsMessage(data);
+        } catch (err) {}
+      };
+
+      this.ws.onclose = () => {
+        this.ws = null;
+      };
+
+      this.ws.onerror = () => {
+        this.ws = null;
+      };
+    } catch (e) {
+      console.warn('WebSocket init fallback to HTTP:', e);
+    }
+  }
+
+  handleWsMessage(data) {
+    switch (data.type) {
+      case 'code_change': {
+        const editor = document.getElementById('peer-shared-editor');
+        if (editor && document.activeElement !== editor) {
+          this.lastCodeVersion = data.code;
+          editor.value = data.code;
+        }
+        const typingInd = document.getElementById('peer-typing-indicator');
+        if (typingInd) {
+          typingInd.textContent = `• ${data.fromPeerName || 'Peer'} is typing...`;
+          typingInd.classList.remove('hidden');
+          if (this.typingTimer) clearTimeout(this.typingTimer);
+          this.typingTimer = setTimeout(() => typingInd?.classList.add('hidden'), 1500);
+        }
+        break;
+      }
+
+      case 'chat_message': {
+        if (data.message) {
+          const chatBox = document.getElementById('peer-chat-messages');
+          if (chatBox) {
+            const currentMsgIds = new Set(Array.from(chatBox.querySelectorAll('[data-msg-id]')).map(el => el.getAttribute('data-msg-id')));
+            if (!currentMsgIds.has(data.message.id)) {
+              this.appendMessageToUI(data.message);
+            }
+          }
+        }
+        break;
+      }
+
+      case 'whiteboard_stroke': {
+        if (data.stroke && this.whiteboardCtx) {
+          const s = data.stroke;
+          this.whiteboardCtx.save();
+          this.whiteboardCtx.strokeStyle = s.color || '#38BDF8';
+          this.whiteboardCtx.lineWidth = s.width || 2.5;
+          this.whiteboardCtx.lineCap = 'round';
+          this.whiteboardCtx.beginPath();
+          this.whiteboardCtx.moveTo(s.x0, s.y0);
+          this.whiteboardCtx.lineTo(s.x1, s.y1);
+          this.whiteboardCtx.stroke();
+          this.whiteboardCtx.restore();
+        }
+        break;
+      }
+
+      case 'whiteboard_clear': {
+        this.clearWhiteboardLocal();
+        break;
+      }
+
+      case 'peer_run': {
+        const consoleBox = document.getElementById('peer-output-console');
+        if (consoleBox && data.output) {
+          consoleBox.textContent = `[${data.fromPeerName || 'Peer'} executed code]:\n${data.output}`;
+        }
+        break;
+      }
+
+      case 'peer_joined': {
+        this.isSoloAI = false;
+        const statusText = document.getElementById('peer-connection-status');
+        const remoteName = document.getElementById('remote-peer-name');
+        const remoteAvatar = document.getElementById('remote-avatar-icon');
+        if (statusText) statusText.textContent = `🟢 Connected with ${data.name} • Live Peer-to-Peer Session`;
+        if (remoteName) remoteName.textContent = `${data.name} (Friend)`;
+        if (remoteAvatar) remoteAvatar.textContent = data.avatar || '🧑‍💻';
+        this.handlePeerWebRTC(data.peerId);
+        break;
+      }
+
+      case 'webrtc_signal': {
+        this.processIncomingSignal(data.fromPeerId, data.signal);
+        break;
+      }
+    }
   }
 
   // ── ATTACH ACTIVE ROOM EVENTS ──────────────────────────────────────────────
@@ -484,16 +739,59 @@ class PeerPlatformManager {
       this.leaveRoom();
     });
 
-    // Copy room link
+    // Copy room ID
     document.getElementById('btn-copy-room-link')?.addEventListener('click', () => {
-      navigator.clipboard?.writeText(window.location.origin + '?room=' + this.currentRoom);
-      alert('Room code #' + this.currentRoom + ' copied to clipboard! Share it with a classmate to connect.');
+      navigator.clipboard?.writeText(this.currentRoom);
+      alert('Room ID "' + this.currentRoom + '" copied to clipboard!\n\nSend this Room ID to your peer so they can paste it into "Join with Room ID" and connect directly with you.');
     });
 
     // Media Controls
     document.getElementById('btn-toggle-mic')?.addEventListener('click', () => this.toggleMic());
     document.getElementById('btn-toggle-cam')?.addEventListener('click', () => this.toggleCam());
     document.getElementById('btn-toggle-screen')?.addEventListener('click', () => this.toggleScreenShare());
+
+    // Snap / Upload Photo for Camera fallback
+    const snapBtn = document.getElementById('btn-snap-photo');
+    const snapInput = document.getElementById('input-snap-face');
+    snapBtn?.addEventListener('click', () => {
+      snapInput?.click();
+    });
+    snapInput?.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 320;
+            canvas.height = 240;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 320, 240);
+            this.customLocalPhoto = canvas.toDataURL('image/jpeg', 0.5);
+            
+            // Show snapshot locally
+            const snapImg = document.getElementById('peer-local-snapshot-img');
+            const localBox = document.getElementById('peer-local-avatar-box');
+            const localVid = document.getElementById('peer-local-video');
+            if (snapImg) {
+              snapImg.src = this.customLocalPhoto;
+              snapImg.classList.remove('hidden');
+            }
+            if (localBox) localBox.classList.add('hidden');
+            if (localVid) localVid.classList.add('hidden');
+          };
+          img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Camera Troubleshooter Guide toggle
+    document.getElementById('btn-cam-guide-toggle')?.addEventListener('click', () => {
+      const guide = document.getElementById('cam-guide-content');
+      if (guide) guide.classList.toggle('hidden');
+    });
 
     // Whiteboard Controls
     document.getElementById('btn-open-whiteboard')?.addEventListener('click', () => this.openWhiteboard());
@@ -619,15 +917,29 @@ class PeerPlatformManager {
     canvas.onmousedown = (e) => {
       this.isDrawing = true;
       const rect = canvas.getBoundingClientRect();
+      this.lastDrawX = e.clientX - rect.left;
+      this.lastDrawY = e.clientY - rect.top;
       this.whiteboardCtx.beginPath();
-      this.whiteboardCtx.moveTo(e.clientX - rect.left, e.clientY - rect.top);
+      this.whiteboardCtx.moveTo(this.lastDrawX, this.lastDrawY);
     };
 
     canvas.onmousemove = (e) => {
       if (!this.isDrawing) return;
       const rect = canvas.getBoundingClientRect();
-      this.whiteboardCtx.lineTo(e.clientX - rect.left, e.clientY - rect.top);
+      const currX = e.clientX - rect.left;
+      const currY = e.clientY - rect.top;
+      this.whiteboardCtx.lineTo(currX, currY);
       this.whiteboardCtx.stroke();
+
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'whiteboard_stroke',
+          stroke: { x0: this.lastDrawX, y0: this.lastDrawY, x1: currX, y1: currY, color: '#38BDF8', width: 2.5 }
+        }));
+      }
+
+      this.lastDrawX = currX;
+      this.lastDrawY = currY;
     };
 
     canvas.onmouseup = () => { this.isDrawing = false; };
@@ -639,6 +951,13 @@ class PeerPlatformManager {
   }
 
   clearWhiteboard() {
+    this.clearWhiteboardLocal();
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'whiteboard_clear' }));
+    }
+  }
+
+  clearWhiteboardLocal() {
     const canvas = document.getElementById('peer-whiteboard-canvas');
     if (canvas && this.whiteboardCtx) {
       this.whiteboardCtx.clearRect(0, 0, canvas.width, canvas.height);
@@ -648,15 +967,22 @@ class PeerPlatformManager {
   // ── CODE SYNC & RUN ────────────────────────────────────────────────────────
   broadcastCode(code) {
     this.lastCodeVersion = code;
-    fetch('/api/peer/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        roomId: this.currentRoom,
-        peerId: this.peerId,
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'code_change',
         code: code
-      })
-    }).catch(() => {});
+      }));
+    } else {
+      fetch('/api/peer/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          roomId: this.currentRoom,
+          peerId: this.peerId,
+          code: code
+        })
+      }).catch(() => {});
+    }
   }
 
   runSharedCode() {
@@ -679,6 +1005,15 @@ class PeerPlatformManager {
           output = '=== P2P Run Output ===\nProgram executed successfully.\nOutput:\n' + code.split('\n').filter(l => l.includes('print')).map(l => '  ' + l.replace(/print\(|\)/g, '')).join('\n') + '\n\n✅ Exit code 0 (Success)';
         }
         consoleBox.textContent = output;
+
+        // Broadcast run output to peer
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            type: 'peer_run',
+            code: code,
+            output: output
+          }));
+        }
       } catch (err) {
         consoleBox.textContent = '❌ Error: ' + err.message;
       }
@@ -698,20 +1033,28 @@ class PeerPlatformManager {
 
     this.appendMessageToUI(msg);
 
-    try {
-      await fetch('/api/peer/message', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          roomId: this.currentRoom,
-          peerId: this.peerId,
-          sender: this.userName,
-          avatar: this.userAvatar,
-          text: text,
-          type: type
-        })
-      });
-    } catch (e) {}
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'chat_message',
+        text: text,
+        msgType: type
+      }));
+    } else {
+      try {
+        await fetch('/api/peer/message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId: this.currentRoom,
+            peerId: this.peerId,
+            sender: this.userName,
+            avatar: this.userAvatar,
+            text: text,
+            type: type
+          })
+        });
+      } catch (e) {}
+    }
 
     // If solo AI peer partner is active, simulate intelligent peer reply
     if (this.isSoloAI) {
@@ -731,7 +1074,7 @@ class PeerPlatformManager {
   _renderMessage(m) {
     if (m.type === 'system' || m.type === 'join' || m.type === 'leave') {
       return `
-        <div class="text-center my-1.5">
+        <div class="text-center my-1.5" data-msg-id="${m.id}">
           <span class="px-2.5 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[10px] text-slate-400">
             ${m.avatar || '🤖'} ${m.text}
           </span>
@@ -741,7 +1084,7 @@ class PeerPlatformManager {
 
     const isMe = m.sender === this.userName;
     return `
-      <div class="flex items-start gap-2 ${isMe ? 'flex-row-reverse' : ''}">
+      <div class="flex items-start gap-2 ${isMe ? 'flex-row-reverse' : ''}" data-msg-id="${m.id}">
         <span class="h-6 w-6 rounded-full bg-slate-800 flex items-center justify-center text-xs border border-slate-700">${m.avatar || '🧑‍💻'}</span>
         <div class="max-w-[75%] rounded-xl p-2.5 text-xs ${isMe ? 'bg-orange-600/90 text-white rounded-tr-none' : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tl-none'} shadow">
           <div class="flex items-center justify-between gap-2 mb-0.5">
@@ -754,7 +1097,7 @@ class PeerPlatformManager {
     `;
   }
 
-  // ── SYNC LOOP (Real-time updates) ──────────────────────────────────────────
+  // ── SYNC LOOP (Fast real-time updates for friend connection) ────────────────
   startSyncLoop() {
     if (this.syncTimer) clearInterval(this.syncTimer);
     this.syncTimer = setInterval(async () => {
@@ -772,27 +1115,324 @@ class PeerPlatformManager {
         });
         const data = await res.json();
         if (data.status === 'success') {
-          // Sync remote code if changed elsewhere and editor not focused
+          // Detect if a real friend joined the room
+          const otherPeers = (data.peers || []).filter(p => p.id !== this.peerId);
+          if (otherPeers.length > 0) {
+            this.isSoloAI = false; // Disable AI bot, real friend is here!
+            const friend = otherPeers[0];
+            const statusText = document.getElementById('peer-connection-status');
+            const remoteName = document.getElementById('remote-peer-name');
+            const remoteAvatar = document.getElementById('remote-avatar-icon');
+            const remoteStatus = document.getElementById('remote-peer-status');
+
+            if (statusText) statusText.textContent = `🟢 Connected with ${friend.name} • Live Peer-to-Peer Session`;
+            if (remoteName) remoteName.textContent = `${friend.name} (Friend)`;
+            if (remoteAvatar) remoteAvatar.textContent = friend.avatar || '🧑‍💻';
+            if (remoteStatus) remoteStatus.textContent = friend.micOn ? '🎙️ Mic Active' : '🔇 Muted';
+
+            // Establish real WebRTC connection if possible
+            this.handlePeerWebRTC(friend.id);
+          }
+
+          // Sync remote code if changed elsewhere and local editor is not currently focused
           const editor = document.getElementById('peer-shared-editor');
           if (editor && data.code && data.code !== this.lastCodeVersion && document.activeElement !== editor) {
             this.lastCodeVersion = data.code;
             editor.value = data.code;
           }
 
+          // Sync incoming chat messages from friend in real time
+          if (data.messages && data.messages.length) {
+            const chatBox = document.getElementById('peer-chat-messages');
+            if (chatBox) {
+              const currentMsgIds = new Set(Array.from(chatBox.querySelectorAll('[data-msg-id]')).map(el => el.getAttribute('data-msg-id')));
+              let shouldScroll = false;
+              data.messages.forEach(m => {
+                if (!currentMsgIds.has(m.id)) {
+                  chatBox.insertAdjacentHTML('beforeend', this._renderMessage(m));
+                  shouldScroll = true;
+                }
+              });
+              if (shouldScroll) {
+                chatBox.scrollTop = chatBox.scrollHeight;
+              }
+            }
+          }
+
           // Update member count
           const countBadge = document.getElementById('chat-members-count');
           if (countBadge && data.peers) {
-            countBadge.textContent = `${data.peers.length} Members Online`;
+            countBadge.textContent = `${data.peers.length} Member${data.peers.length > 1 ? 's' : ''} Online`;
           }
         }
       } catch (e) {}
-    }, 2000);
+    }, 800);
+  }
+
+  // ── FRAME BROADCASTER & RECEIVER (Live Video Relay) ─────────────────────────
+  startFrameBroadcaster() {
+    if (this.frameBroadcastTimer) clearInterval(this.frameBroadcastTimer);
+    if (!this.captureCanvas) {
+      this.captureCanvas = document.createElement('canvas');
+      this.captureCanvas.width = 320;
+      this.captureCanvas.height = 240;
+      this.captureCtx = this.captureCanvas.getContext('2d');
+    }
+
+    const badge = document.getElementById('local-broadcasting-badge');
+
+    this.frameBroadcastTimer = setInterval(() => {
+      if (!this.currentRoom || !this.camOn) {
+        if (badge) badge.classList.add('hidden');
+        return;
+      }
+
+      let frameData = null;
+
+      // 1. Capture from local camera feed
+      if (this.localStream) {
+        const localVid = document.getElementById('peer-local-video');
+        if (localVid && localVid.readyState >= 2 && localVid.videoWidth > 0) {
+          try {
+            this.captureCtx.drawImage(localVid, 0, 0, 320, 240);
+            frameData = this.captureCanvas.toDataURL('image/jpeg', 0.45);
+          } catch (e) {}
+        }
+      } else if (this.customLocalPhoto) {
+        frameData = this.customLocalPhoto;
+      }
+
+      if (frameData) {
+        if (badge) badge.classList.remove('hidden');
+        fetch('/api/peer/frame', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId: this.currentRoom,
+            peerId: this.peerId,
+            frame: frameData
+          })
+        }).catch(() => {});
+      } else {
+        if (badge) badge.classList.add('hidden');
+      }
+    }, 120);
+  }
+
+  startFrameReceiver() {
+    if (this.framePollTimer) clearInterval(this.framePollTimer);
+
+    this.framePollTimer = setInterval(async () => {
+      if (!this.currentRoom) return;
+
+      try {
+        const res = await fetch(`/api/peer/frames?roomId=${encodeURIComponent(this.currentRoom)}&peerId=${encodeURIComponent(this.peerId)}`);
+        const data = await res.json();
+
+        if (data.status === 'success' && data.frames) {
+          const keys = Object.keys(data.frames);
+          const remoteImg = document.getElementById('peer-remote-stream-img');
+          const remoteVid = document.getElementById('peer-remote-video');
+          const remoteBox = document.getElementById('peer-remote-avatar-box');
+          const liveInd = document.getElementById('remote-live-indicator');
+
+          if (keys.length > 0) {
+            const firstPeerId = keys[0];
+            const frameSrc = data.frames[firstPeerId];
+
+            if (frameSrc) {
+              // If WebRTC direct video is not playing, display relay frame!
+              if (remoteVid && (remoteVid.classList.contains('hidden') || remoteVid.paused)) {
+                if (remoteImg) {
+                  remoteImg.src = frameSrc;
+                  remoteImg.classList.remove('hidden');
+                }
+                if (remoteBox) remoteBox.classList.add('hidden');
+                if (liveInd) liveInd.classList.remove('hidden');
+              }
+            }
+          } else {
+            // No recent active frames
+            if (remoteVid && remoteVid.classList.contains('hidden')) {
+              if (remoteImg) remoteImg.classList.add('hidden');
+              if (remoteBox) remoteBox.classList.remove('hidden');
+              if (liveInd) liveInd.classList.add('hidden');
+            }
+          }
+        }
+      } catch (e) {}
+    }, 150);
+  }
+
+  // ── WEBRTC P2P SIGNALING & VIDEO STREAMING ─────────────────────────────────
+  async handlePeerWebRTC(remotePeerId) {
+    if (this.peerConnection) return; // already negotiating or connected
+
+    try {
+      this.remoteCandidateQueue = [];
+      const config = {
+        iceServers: [
+          { urls: 'stun:stun.l.google.com:19302' },
+          { urls: 'stun:stun1.l.google.com:19302' }
+        ]
+      };
+      this.peerConnection = new RTCPeerConnection(config);
+
+      // Add local media tracks if real camera/mic is active
+      if (this.localStream) {
+        this.localStream.getTracks().forEach(track => {
+          this.peerConnection.addTrack(track, this.localStream);
+        });
+      } else {
+        // Explicitly add recvonly transceivers so SDP includes video/audio media lines
+        try {
+          this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
+          this.peerConnection.addTransceiver('audio', { direction: 'recvonly' });
+        } catch (e) {}
+      }
+
+      // When remote friend stream arrives, attach directly to remote video!
+      this.peerConnection.ontrack = (event) => {
+        const remoteVid = document.getElementById('peer-remote-video');
+        const remoteImg = document.getElementById('peer-remote-stream-img');
+        const remoteBox = document.getElementById('peer-remote-avatar-box');
+        const liveInd = document.getElementById('remote-live-indicator');
+        if (remoteVid && event.streams && event.streams[0]) {
+          remoteVid.srcObject = event.streams[0];
+          remoteVid.classList.remove('hidden');
+          if (remoteImg) remoteImg.classList.add('hidden');
+          if (remoteBox) remoteBox.classList.add('hidden');
+          if (liveInd) liveInd.classList.remove('hidden');
+        }
+      };
+
+      // Relay local ICE candidates to server
+      this.peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+              type: 'webrtc_signal',
+              toPeerId: remotePeerId,
+              signal: { type: 'candidate', candidate: event.candidate }
+            }));
+          } else {
+            fetch('/api/peer/signal', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                roomId: this.currentRoom,
+                fromPeerId: this.peerId,
+                toPeerId: remotePeerId,
+                signal: { type: 'candidate', candidate: event.candidate }
+              })
+            }).catch(() => {});
+          }
+        }
+      };
+
+      // Deterministic caller selection
+      if (this.peerId < remotePeerId) {
+        const offer = await this.peerConnection.createOffer();
+        await this.peerConnection.setLocalDescription(offer);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            type: 'webrtc_signal',
+            toPeerId: remotePeerId,
+            signal: { type: 'offer', sdp: offer.sdp }
+          }));
+        } else {
+          fetch('/api/peer/signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              roomId: this.currentRoom,
+              fromPeerId: this.peerId,
+              toPeerId: remotePeerId,
+              signal: { type: 'offer', sdp: offer.sdp }
+            })
+          }).catch(() => {});
+        }
+      }
+
+      this.startSignalPoll(remotePeerId);
+    } catch (e) {
+      console.warn('WebRTC peer negotiation notice:', e);
+    }
+  }
+
+  async processIncomingSignal(fromPeerId, sig) {
+    if (!this.peerConnection) return;
+    try {
+      if (sig.type === 'offer') {
+        await this.peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: sig.sdp }));
+        while (this.remoteCandidateQueue && this.remoteCandidateQueue.length > 0) {
+          const c = this.remoteCandidateQueue.shift();
+          try { await this.peerConnection.addIceCandidate(new RTCIceCandidate(c)); } catch (e) {}
+        }
+        const answer = await this.peerConnection.createAnswer();
+        await this.peerConnection.setLocalDescription(answer);
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            type: 'webrtc_signal',
+            toPeerId: fromPeerId,
+            signal: { type: 'answer', sdp: answer.sdp }
+          }));
+        } else {
+          fetch('/api/peer/signal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              roomId: this.currentRoom,
+              fromPeerId: this.peerId,
+              toPeerId: fromPeerId,
+              signal: { type: 'answer', sdp: answer.sdp }
+            })
+          }).catch(() => {});
+        }
+      } else if (sig.type === 'answer') {
+        if (this.peerConnection.signalingState !== 'stable') {
+          await this.peerConnection.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: sig.sdp }));
+          while (this.remoteCandidateQueue && this.remoteCandidateQueue.length > 0) {
+            const c = this.remoteCandidateQueue.shift();
+            try { await this.peerConnection.addIceCandidate(new RTCIceCandidate(c)); } catch (e) {}
+          }
+        }
+      } else if (sig.type === 'candidate') {
+        if (this.peerConnection.remoteDescription && this.peerConnection.remoteDescription.type) {
+          try {
+            await this.peerConnection.addIceCandidate(new RTCIceCandidate(sig.candidate));
+          } catch (e) {}
+        } else {
+          this.remoteCandidateQueue.push(sig.candidate);
+        }
+      }
+    } catch (err) {
+      console.warn('Signal processing note:', err);
+    }
+  }
+
+  startSignalPoll(remotePeerId) {
+    if (this.signalPollTimer) clearInterval(this.signalPollTimer);
+    this.signalPollTimer = setInterval(async () => {
+      if (!this.currentRoom || !this.peerConnection) return;
+      try {
+        const res = await fetch(`/api/peer/signals?roomId=${encodeURIComponent(this.currentRoom)}&peerId=${encodeURIComponent(this.peerId)}`);
+        const data = await res.json();
+        if (data.status === 'success' && data.signals && data.signals.length) {
+          for (const item of data.signals) {
+            this.processIncomingSignal(item.fromPeerId || remotePeerId, item.signal);
+          }
+        }
+      } catch (e) {}
+    }, 1000);
   }
 
   // ── AI PEER PARTNER (Ensures instant peer connection even when testing solo)
   checkAndStartAIPartner() {
     this.isSoloAI = true;
     setTimeout(() => {
+      if (!this.isSoloAI) return; // a real friend already joined!
       const statusText = document.getElementById('peer-connection-status');
       const remoteName = document.getElementById('remote-peer-name');
       const remoteStatus = document.getElementById('remote-peer-status');
@@ -813,6 +1453,7 @@ class PeerPlatformManager {
   }
 
   triggerAIPeerReply(studentText) {
+    if (!this.isSoloAI) return; // do not trigger if talking with a real friend!
     const lower = studentText.toLowerCase();
     let reply = 'Great thought! How about we trace the base condition on line 4 together?';
 
@@ -841,8 +1482,21 @@ class PeerPlatformManager {
       this.localStream.getTracks().forEach(t => t.stop());
       this.localStream = null;
     }
+    if (this.peerConnection) {
+      try { this.peerConnection.close(); } catch (e) {}
+      this.peerConnection = null;
+    }
     if (this.syncTimer) clearInterval(this.syncTimer);
+    if (this.signalPollTimer) clearInterval(this.signalPollTimer);
     if (this.aiPartnerTimer) clearTimeout(this.aiPartnerTimer);
+    if (this.frameBroadcastTimer) clearInterval(this.frameBroadcastTimer);
+    if (this.framePollTimer) clearInterval(this.framePollTimer);
+    if (this.ws) {
+      try { this.ws.close(); } catch (e) {}
+      this.ws = null;
+    }
+    this.remoteCandidateQueue = [];
+    this.customLocalPhoto = null;
 
     fetch('/api/peer/leave', {
       method: 'POST',
@@ -856,3 +1510,4 @@ class PeerPlatformManager {
 }
 
 window.PeerPlatformManager = PeerPlatformManager;
+

@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const url = require('url');
+const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -44,7 +45,8 @@ const peerRooms = {
     messages: [
       { id: 'm_0', sender: 'System', avatar: '🤖', text: 'Welcome to Recursion & Call Stack Lab! Live pair-programming and video room is open.', time: 'Just now', type: 'system' }
     ],
-    signals: {}
+    signals: {},
+    videoFrames: {}
   },
   'two-pointers': {
     id: 'two-pointers',
@@ -55,7 +57,8 @@ const peerRooms = {
     messages: [
       { id: 'm_0', sender: 'System', avatar: '🤖', text: 'Welcome to Two-Pointer Room! Compare O(N^2) brute force vs O(N) linear time.', time: 'Just now', type: 'system' }
     ],
-    signals: {}
+    signals: {},
+    videoFrames: {}
   },
   'python-data': {
     id: 'python-data',
@@ -66,7 +69,8 @@ const peerRooms = {
     messages: [
       { id: 'm_0', sender: 'System', avatar: '🤖', text: 'Welcome to Python Data Structures Room! Share object-oriented code snippets.', time: 'Just now', type: 'system' }
     ],
-    signals: {}
+    signals: {},
+    videoFrames: {}
   }
 };
 
@@ -692,7 +696,8 @@ const server = http.createServer((req, res) => {
             messages: [
               { id: 'm_' + Date.now(), sender: 'System', avatar: '🤖', text: 'Room created. Waiting for peer connections...', time: 'Just now', type: 'system' }
             ],
-            signals: {}
+            signals: {},
+            videoFrames: {}
           };
           peerRooms[roomId] = room;
         }
@@ -855,6 +860,40 @@ const server = http.createServer((req, res) => {
         return;
       }
 
+      // Live Video Frame Stream Relay (Direct backup & instant cross-device rendering)
+      if (pathname === '/api/peer/frame' && req.method === 'POST') {
+        const { roomId, peerId, frame } = data;
+        const room = peerRooms[roomId];
+        if (room && peerId && frame) {
+          if (!room.videoFrames) room.videoFrames = {};
+          room.videoFrames[peerId] = {
+            frame: frame,
+            timestamp: Date.now()
+          };
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success' }));
+        return;
+      }
+
+      if (pathname === '/api/peer/frames' && req.method === 'GET') {
+        const roomId = parsedUrl.query.roomId;
+        const peerId = parsedUrl.query.peerId;
+        const room = peerRooms[roomId];
+        let remoteFrames = {};
+        if (room && room.videoFrames) {
+          const now = Date.now();
+          for (const [pId, pData] of Object.entries(room.videoFrames)) {
+            if (pId !== peerId && (now - pData.timestamp) < 5000) {
+              remoteFrames[pId] = pData.frame;
+            }
+          }
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success', frames: remoteFrames }));
+        return;
+      }
+
       // 5. Health check
       if (pathname === '/api/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -897,6 +936,261 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'Content-Type': contentType });
       res.end(content);
     }
+  });
+});
+
+// ==============================================================================
+// Native Real-Time WebSocket Hub (RFC 6455) for Instant Peer Sync & Pairing
+// ==============================================================================
+function encodeWsFrame(data) {
+  const payload = Buffer.from(typeof data === 'string' ? data : JSON.stringify(data), 'utf8');
+  const len = payload.length;
+  let header;
+  if (len <= 125) {
+    header = Buffer.from([0x81, len]);
+  } else if (len <= 65535) {
+    header = Buffer.alloc(4);
+    header[0] = 0x81;
+    header[1] = 126;
+    header.writeUInt16BE(len, 2);
+  } else {
+    header = Buffer.alloc(10);
+    header[0] = 0x81;
+    header[1] = 127;
+    header.writeBigUInt64BE(BigInt(len), 2);
+  }
+  return Buffer.concat([header, payload]);
+}
+
+function decodeWsFrames(buffer) {
+  const frames = [];
+  let offset = 0;
+  while (offset < buffer.length) {
+    if (buffer.length - offset < 2) break;
+    const b0 = buffer[offset];
+    const b1 = buffer[offset + 1];
+    const opcode = b0 & 0x0f;
+    const masked = (b1 & 0x80) !== 0;
+    let payloadLen = b1 & 0x7f;
+    let headerLen = 2;
+    if (payloadLen === 126) {
+      if (buffer.length - offset < 4) break;
+      payloadLen = buffer.readUInt16BE(offset + 2);
+      headerLen = 4;
+    } else if (payloadLen === 127) {
+      if (buffer.length - offset < 10) break;
+      payloadLen = Number(buffer.readBigUInt64BE(offset + 2));
+      headerLen = 10;
+    }
+    const maskKeyLen = masked ? 4 : 0;
+    if (buffer.length - offset < headerLen + maskKeyLen + payloadLen) break;
+    let payload = buffer.slice(offset + headerLen + maskKeyLen, offset + headerLen + maskKeyLen + payloadLen);
+    if (masked) {
+      const maskKey = buffer.slice(offset + headerLen, offset + headerLen + 4);
+      const unmasked = Buffer.alloc(payloadLen);
+      for (let i = 0; i < payloadLen; i++) {
+        unmasked[i] = payload[i] ^ maskKey[i % 4];
+      }
+      payload = unmasked;
+    }
+    frames.push({ opcode, payload });
+    offset += headerLen + maskKeyLen + payloadLen;
+  }
+  return { frames, remaining: buffer.slice(offset) };
+}
+
+const peerWsRooms = new Map();
+
+function broadcastToRoom(roomId, messageObj, excludePeerId = null) {
+  const roomClients = peerWsRooms.get(roomId);
+  if (!roomClients) return;
+  const frame = encodeWsFrame(messageObj);
+  for (const client of roomClients) {
+    if (excludePeerId && client.peerId === excludePeerId) continue;
+    try {
+      if (client.socket && client.socket.writable) {
+        client.socket.write(frame);
+      }
+    } catch (err) {}
+  }
+}
+
+function handlePeerWsMessage(roomId, client, data) {
+  const room = peerRooms[roomId];
+  if (!room) return;
+
+  switch (data.type) {
+    case 'code_change':
+      room.code = data.code;
+      broadcastToRoom(roomId, {
+        type: 'code_change',
+        code: data.code,
+        cursor: data.cursor,
+        fromPeerId: client.peerId,
+        fromPeerName: client.name
+      }, client.peerId);
+      break;
+
+    case 'cursor_move':
+      broadcastToRoom(roomId, {
+        type: 'cursor_move',
+        cursor: data.cursor,
+        fromPeerId: client.peerId,
+        fromPeerName: client.name
+      }, client.peerId);
+      break;
+
+    case 'chat_message':
+      const newMsg = {
+        id: 'm_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        sender: client.name,
+        avatar: client.avatar,
+        text: data.text,
+        type: data.msgType || 'chat',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      room.messages.push(newMsg);
+      if (room.messages.length > 60) room.messages.shift();
+      broadcastToRoom(roomId, {
+        type: 'chat_message',
+        message: newMsg
+      });
+      break;
+
+    case 'whiteboard_stroke':
+      broadcastToRoom(roomId, {
+        type: 'whiteboard_stroke',
+        stroke: data.stroke,
+        fromPeerId: client.peerId
+      }, client.peerId);
+      break;
+
+    case 'whiteboard_clear':
+      broadcastToRoom(roomId, {
+        type: 'whiteboard_clear',
+        fromPeerId: client.peerId
+      }, client.peerId);
+      break;
+
+    case 'peer_run':
+      broadcastToRoom(roomId, {
+        type: 'peer_run',
+        code: data.code,
+        output: data.output,
+        fromPeerId: client.peerId,
+        fromPeerName: client.name
+      });
+      break;
+
+    case 'webrtc_signal':
+      const roomClients = peerWsRooms.get(roomId);
+      if (roomClients) {
+        const frame = encodeWsFrame({
+          type: 'webrtc_signal',
+          fromPeerId: client.peerId,
+          signal: data.signal
+        });
+        for (const c of roomClients) {
+          if (c.peerId === data.toPeerId && c.socket && c.socket.writable) {
+            c.socket.write(frame);
+            break;
+          }
+        }
+      }
+      break;
+  }
+}
+
+server.on('upgrade', (req, socket, head) => {
+  const parsed = url.parse(req.url, true);
+  if (parsed.pathname !== '/ws/peer') {
+    socket.destroy();
+    return;
+  }
+
+  const key = req.headers['sec-websocket-key'];
+  if (!key) {
+    socket.destroy();
+    return;
+  }
+
+  const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
+  const acceptKey = crypto.createHash('sha1').update(key + GUID).digest('base64');
+  const headers = [
+    'HTTP/1.1 101 Switching Protocols',
+    'Upgrade: websocket',
+    'Connection: Upgrade',
+    `Sec-WebSocket-Accept: ${acceptKey}`,
+    '\r\n'
+  ];
+  socket.write(headers.join('\r\n'));
+
+  const roomId = parsed.query.roomId || 'recursion-stack';
+  const peerId = parsed.query.peerId || ('peer_' + Date.now());
+  const peerName = parsed.query.name || 'Learner';
+  const peerAvatar = parsed.query.avatar || '👨‍💻';
+
+  if (!peerWsRooms.has(roomId)) {
+    peerWsRooms.set(roomId, new Set());
+  }
+
+  const client = { peerId, socket, name: peerName, avatar: peerAvatar };
+  peerWsRooms.get(roomId).add(client);
+
+  // Send initial room snapshot
+  const room = peerRooms[roomId];
+  const welcomePayload = {
+    type: 'welcome',
+    roomId,
+    peerId,
+    code: room ? room.code : '',
+    peers: room ? room.peers : []
+  };
+  socket.write(encodeWsFrame(welcomePayload));
+
+  // Notify others that peer connected
+  broadcastToRoom(roomId, {
+    type: 'peer_joined',
+    peerId,
+    name: peerName,
+    avatar: peerAvatar
+  }, peerId);
+
+  let buffer = Buffer.alloc(0);
+  socket.on('data', chunk => {
+    buffer = Buffer.concat([buffer, chunk]);
+    const { frames, remaining } = decodeWsFrames(buffer);
+    buffer = remaining;
+
+    for (const frame of frames) {
+      if (frame.opcode === 0x8) {
+        socket.end();
+        break;
+      } else if (frame.opcode === 0x9) {
+        socket.write(Buffer.from([0x8a, 0x00]));
+      } else if (frame.opcode === 0x1) {
+        try {
+          const data = JSON.parse(frame.payload.toString('utf8'));
+          handlePeerWsMessage(roomId, client, data);
+        } catch (e) {}
+      }
+    }
+  });
+
+  socket.on('close', () => {
+    const clients = peerWsRooms.get(roomId);
+    if (clients) {
+      clients.delete(client);
+      if (clients.size === 0) peerWsRooms.delete(roomId);
+    }
+    broadcastToRoom(roomId, {
+      type: 'peer_left',
+      peerId
+    });
+  });
+
+  socket.on('error', () => {
+    socket.destroy();
   });
 });
 
