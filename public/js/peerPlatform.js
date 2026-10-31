@@ -35,6 +35,9 @@ class PeerPlatformManager {
     this.lastDrawY = 0;
     this.audioContext = null;
     this.audioMeterTimer = null;
+    this.voiceRecorder = null;
+    this.voiceQueue = [];
+    this.isPlayingVoice = false;
   }
 
   generateRandomRoomId() {
@@ -436,6 +439,17 @@ class PeerPlatformManager {
           </div>
         </div>
 
+        <!-- Audio Autoplay Banner (Shown if browser restricts audio autoplay) -->
+        <div id="audio-autoplay-banner" class="hidden p-3 rounded-xl bg-gradient-to-r from-orange-600 to-amber-600 text-white text-xs font-bold flex items-center justify-between shadow-xl cursor-pointer animate-pulse">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🔊</span>
+            <span>Your browser paused incoming peer voice. Click here to enable audio!</span>
+          </div>
+          <button class="px-3 py-1 rounded-lg bg-black/40 hover:bg-black/60 text-white font-bold text-xs transition">
+            Enable Voice 🔊
+          </button>
+        </div>
+
         <!-- 3-Column Studio Grid: Left Video Feeds | Center Code | Right Chat -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
           
@@ -772,7 +786,49 @@ class PeerPlatformManager {
         }
         break;
       }
+
+      case 'voice_packet': {
+        if (data.audio) {
+          const remoteStatus = document.getElementById('remote-peer-status');
+          if (remoteStatus) remoteStatus.textContent = '🎙️ Peer Speaking...';
+          this.enqueueVoicePacket(data.audio);
+        }
+        break;
+      }
     }
+  }
+
+  enqueueVoicePacket(audioData) {
+    if (!this.voiceQueue) this.voiceQueue = [];
+    this.voiceQueue.push(audioData);
+    if (!this.isPlayingVoice) {
+      this.playNextVoicePacket();
+    }
+  }
+
+  playNextVoicePacket() {
+    if (!this.voiceQueue || this.voiceQueue.length === 0) {
+      this.isPlayingVoice = false;
+      return;
+    }
+
+    this.isPlayingVoice = true;
+    const nextAudio = this.voiceQueue.shift();
+    const sound = new Audio(nextAudio);
+
+    sound.onended = () => {
+      this.playNextVoicePacket();
+    };
+
+    sound.onerror = () => {
+      this.playNextVoicePacket();
+    };
+
+    sound.play().catch(() => {
+      const banner = document.getElementById('audio-autoplay-banner');
+      if (banner) banner.classList.remove('hidden');
+      this.playNextVoicePacket();
+    });
   }
 
   // ── ATTACH ACTIVE ROOM EVENTS ──────────────────────────────────────────────
@@ -791,6 +847,11 @@ class PeerPlatformManager {
     // Media Controls
     document.getElementById('btn-toggle-mic')?.addEventListener('click', () => this.toggleMic());
     document.getElementById('btn-unlock-mic-cta')?.addEventListener('click', () => this.unlockMicrophone(true));
+    document.getElementById('audio-autoplay-banner')?.addEventListener('click', () => {
+      document.getElementById('audio-autoplay-banner')?.classList.add('hidden');
+      const remoteAudio = document.getElementById('peer-remote-audio');
+      if (remoteAudio) remoteAudio.play().catch(() => {});
+    });
     document.getElementById('btn-toggle-cam')?.addEventListener('click', () => this.toggleCam());
     document.getElementById('btn-toggle-screen')?.addEventListener('click', () => this.toggleScreenShare());
 
@@ -969,6 +1030,7 @@ class PeerPlatformManager {
 
       this.updateMicUI(true);
       this.startAudioMeter(this.localStream);
+      this.startVoiceBroadcast(this.localStream);
 
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'mic_status', micOn: true }));
@@ -1031,6 +1093,48 @@ class PeerPlatformManager {
       }, 100);
     } catch (e) {
       console.warn('Audio meter initialization notice:', e);
+    }
+  }
+
+  startVoiceBroadcast(stream) {
+    if (this.voiceRecorder && this.voiceRecorder.state !== 'inactive') {
+      try { this.voiceRecorder.stop(); } catch (e) {}
+    }
+
+    try {
+      const audioTrack = stream ? stream.getAudioTracks()[0] : null;
+      if (!audioTrack) return;
+
+      const voiceStream = new MediaStream([audioTrack]);
+      let mime = '';
+      if (typeof MediaRecorder !== 'undefined') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mime = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mime = 'audio/webm';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mime = 'audio/mp4';
+        }
+      }
+
+      this.voiceRecorder = mime ? new MediaRecorder(voiceStream, { mimeType: mime }) : new MediaRecorder(voiceStream);
+      this.voiceRecorder.ondataavailable = (e) => {
+        if (!this.micOn || !e.data || e.data.size === 0) return;
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            this.ws.send(JSON.stringify({
+              type: 'voice_packet',
+              audio: reader.result
+            }));
+          };
+          reader.readAsDataURL(e.data);
+        }
+      };
+
+      this.voiceRecorder.start(250); // 250ms voice chunks
+    } catch (err) {
+      console.warn('Voice packet broadcaster notice:', err);
     }
   }
 
@@ -1464,8 +1568,25 @@ class PeerPlatformManager {
       const config = {
         iceServers: [
           { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
+          { urls: 'stun:stun1.l.google.com:19302' },
+          { urls: 'stun:stun.cloudflare.com:3478' },
+          {
+            urls: 'turn:openrelay.metered.ca:80',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          },
+          {
+            urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+            username: 'openrelayproject',
+            credential: 'openrelayproject'
+          }
+        ],
+        iceCandidatePoolSize: 10
       };
       this.peerConnection = new RTCPeerConnection(config);
 
@@ -1500,8 +1621,11 @@ class PeerPlatformManager {
           if (remoteAudio) {
             remoteAudio.srcObject = aStream;
             remoteAudio.play().catch(() => {
+              const banner = document.getElementById('audio-autoplay-banner');
+              if (banner) banner.classList.remove('hidden');
               const unblockAudio = () => {
                 remoteAudio.play().catch(() => {});
+                if (banner) banner.classList.add('hidden');
                 document.removeEventListener('click', unblockAudio);
               };
               document.addEventListener('click', unblockAudio, { once: true });
@@ -1714,6 +1838,12 @@ class PeerPlatformManager {
       try { this.audioContext.close(); } catch (e) {}
       this.audioContext = null;
     }
+    if (this.voiceRecorder && this.voiceRecorder.state !== 'inactive') {
+      try { this.voiceRecorder.stop(); } catch (e) {}
+      this.voiceRecorder = null;
+    }
+    this.voiceQueue = [];
+    this.isPlayingVoice = false;
     if (this.ws) {
       try { this.ws.close(); } catch (e) {}
       this.ws = null;

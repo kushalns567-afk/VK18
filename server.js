@@ -1082,6 +1082,14 @@ function handlePeerWsMessage(roomId, client, data) {
       }, client.peerId);
       break;
 
+    case 'voice_packet':
+      broadcastToRoom(roomId, {
+        type: 'voice_packet',
+        fromPeerId: client.peerId,
+        audio: data.audio
+      }, client.peerId);
+      break;
+
     case 'peer_run':
       broadcastToRoom(roomId, {
         type: 'peer_run',
