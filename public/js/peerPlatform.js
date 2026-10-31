@@ -33,6 +33,8 @@ class PeerPlatformManager {
     this.typingTimer = null;
     this.lastDrawX = 0;
     this.lastDrawY = 0;
+    this.audioContext = null;
+    this.audioMeterTimer = null;
   }
 
   generateRandomRoomId() {
@@ -330,17 +332,33 @@ class PeerPlatformManager {
       </div>
     `;
 
-    // Request camera & microphone
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    // 3-Tier Robust Media Unlock (Ensures microphone is unlocked even if camera is busy/denied)
+    this.localStream = null;
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
         this.localStream = await navigator.mediaDevices.getUserMedia({
           video: { width: 320, height: 240 },
-          audio: true
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
         });
+      } catch (errBoth) {
+        console.warn('Combined camera+mic failed, trying audio-only unlock:', errBoth);
+        try {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          });
+        } catch (errAudio) {
+          try {
+            this.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          } catch (errAudioBasic) {
+            console.warn('Microphone access blocked or unavailable:', errAudioBasic);
+            try {
+              this.localStream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+            } catch (errVideo) {
+              this.localStream = null;
+            }
+          }
+        }
       }
-    } catch (err) {
-      console.warn('Real webcam/mic not available or denied. Falling back to avatar simulation:', err);
-      this.localStream = null;
     }
 
     // Call server join endpoint
@@ -428,6 +446,7 @@ class PeerPlatformManager {
               <!-- Remote Peer Video Card -->
               <div class="relative bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-lg aspect-video flex items-center justify-center group" id="peer-remote-card">
                 <video id="peer-remote-video" class="w-full h-full object-cover hidden" autoplay playsinline></video>
+                <audio id="peer-remote-audio" autoplay playsinline></audio>
                 <img id="peer-remote-stream-img" class="w-full h-full object-cover hidden" alt="Remote Peer Live Stream" />
                 
                 <!-- Remote Peer Simulated Visual Avatar (shown when video not ready) -->
@@ -455,7 +474,15 @@ class PeerPlatformManager {
                 <div id="peer-local-avatar-box" class="flex flex-col items-center justify-center p-3 text-center space-y-1">
                   <span class="text-3xl block h-12 w-12 rounded-full bg-slate-800 border-2 border-orange-500 flex items-center justify-center" id="local-avatar-display">${this.userAvatar}</span>
                   <strong class="text-xs text-white">${this.userName}</strong>
-                  <span class="text-[10px] text-slate-400" id="local-mic-badge">🎙️ Mic Active</span>
+                  <div class="flex items-center justify-center gap-1.5 flex-wrap">
+                    <span class="text-[10px] text-slate-400" id="local-mic-badge">🎙️ Mic Active</span>
+                    <span id="mic-meter-bar" class="hidden h-1.5 w-10 rounded-full bg-slate-800 overflow-hidden inline-block align-middle border border-slate-700">
+                      <span id="mic-meter-fill" class="h-full bg-emerald-400 w-0 transition-all duration-75 block"></span>
+                    </span>
+                    <button id="btn-unlock-mic-cta" class="hidden px-2 py-0.5 rounded bg-orange-600 hover:bg-orange-500 text-white font-bold text-[9px] shadow animate-pulse">
+                      🔓 Unlock Mic
+                    </button>
+                  </div>
                 </div>
 
                 <div class="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 backdrop-blur text-[10px] text-white font-bold flex items-center gap-1">
@@ -467,8 +494,9 @@ class PeerPlatformManager {
 
             <!-- Media Controls Bar -->
             <div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-around gap-1 text-xs">
-              <button id="btn-toggle-mic" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition" title="Toggle Microphone">
+              <button id="btn-toggle-mic" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition flex items-center gap-1" title="Toggle Microphone">
                 <span id="mic-icon">🎙️</span>
+                <span id="mic-text-status" class="text-[10px] font-bold text-slate-300">Mic</span>
               </button>
               <button id="btn-toggle-cam" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white transition" title="Toggle Camera">
                 <span id="cam-icon">📹</span>
@@ -594,7 +622,7 @@ class PeerPlatformManager {
     `;
 
     // Hook up real local camera if available
-    if (this.localStream) {
+    if (this.localStream && this.localStream.getVideoTracks().length > 0) {
       const localVid = document.getElementById('peer-local-video');
       const localBox = document.getElementById('peer-local-avatar-box');
       if (localVid) {
@@ -603,6 +631,13 @@ class PeerPlatformManager {
         if (localBox) localBox.classList.add('hidden');
         localVid.play().catch(() => {});
       }
+    }
+
+    // Initialize microphone status and activity volume meter
+    const hasAudioTrack = this.localStream && this.localStream.getAudioTracks().length > 0;
+    this.updateMicUI(hasAudioTrack);
+    if (hasAudioTrack) {
+      this.startAudioMeter(this.localStream);
     }
 
     // Start Real-Time Live Video Broadcaster & Receiver Loops
@@ -729,6 +764,14 @@ class PeerPlatformManager {
         this.processIncomingSignal(data.fromPeerId, data.signal);
         break;
       }
+
+      case 'mic_status': {
+        const remoteStatus = document.getElementById('remote-peer-status');
+        if (remoteStatus) {
+          remoteStatus.textContent = data.micOn ? '🎙️ Mic Active' : '🔇 Muted';
+        }
+        break;
+      }
     }
   }
 
@@ -747,6 +790,7 @@ class PeerPlatformManager {
 
     // Media Controls
     document.getElementById('btn-toggle-mic')?.addEventListener('click', () => this.toggleMic());
+    document.getElementById('btn-unlock-mic-cta')?.addEventListener('click', () => this.unlockMicrophone(true));
     document.getElementById('btn-toggle-cam')?.addEventListener('click', () => this.toggleCam());
     document.getElementById('btn-toggle-screen')?.addEventListener('click', () => this.toggleScreenShare());
 
@@ -848,16 +892,163 @@ class PeerPlatformManager {
     this.checkAndStartAIPartner();
   }
 
-  // ── TOGGLE MIC / CAM / SCREEN ──────────────────────────────────────────────
-  toggleMic() {
-    this.micOn = !this.micOn;
-    if (this.localStream) {
-      this.localStream.getAudioTracks().forEach(t => t.enabled = this.micOn);
-    }
+  // ── MICROPHONE UNLOCK, VOLUME METER & MEDIA TOGGLES ──────────────────────
+  updateMicUI(isActive, customLabel = null) {
     const icon = document.getElementById('mic-icon');
     const badge = document.getElementById('local-mic-badge');
-    if (icon) icon.textContent = this.micOn ? '🎙️' : '🔇';
-    if (badge) badge.textContent = this.micOn ? '🎙️ Mic Active' : '🔇 Muted';
+    const statusText = document.getElementById('mic-text-status');
+    const unlockBtn = document.getElementById('btn-unlock-mic-cta');
+    const meterBar = document.getElementById('mic-meter-bar');
+
+    if (isActive) {
+      if (icon) icon.textContent = '🎙️';
+      if (statusText) statusText.textContent = 'Mute';
+      if (badge) {
+        badge.textContent = '🎙️ Mic Active';
+        badge.className = 'text-[10px] text-emerald-400 font-bold';
+      }
+      if (unlockBtn) unlockBtn.classList.add('hidden');
+      if (meterBar) meterBar.classList.remove('hidden');
+    } else {
+      if (icon) icon.textContent = '🔇';
+      if (statusText) statusText.textContent = 'Unmute';
+      if (badge) {
+        badge.textContent = customLabel ? `⚠️ ${customLabel}` : '🔇 Mic Muted';
+        badge.className = 'text-[10px] text-amber-400 font-bold';
+      }
+      if (unlockBtn) unlockBtn.classList.remove('hidden');
+      if (meterBar) meterBar.classList.add('hidden');
+    }
+  }
+
+  async unlockMicrophone(forcePrompt = false) {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Microphone access is not supported on this browser context. Please use an HTTPS connection.');
+        return false;
+      }
+
+      let audioStream = null;
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+        });
+      } catch (e1) {
+        audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+
+      const audioTrack = audioStream.getAudioTracks()[0];
+      if (!audioTrack) {
+        alert('No microphone input detected on this device.');
+        return false;
+      }
+
+      audioTrack.enabled = true;
+      this.micOn = true;
+
+      if (!this.localStream) {
+        this.localStream = audioStream;
+      } else {
+        this.localStream.getAudioTracks().forEach(t => {
+          t.stop();
+          this.localStream.removeTrack(t);
+        });
+        this.localStream.addTrack(audioTrack);
+      }
+
+      // Upgrade active WebRTC senders
+      if (this.peerConnection) {
+        const senders = this.peerConnection.getSenders ? this.peerConnection.getSenders() : [];
+        const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+        if (audioSender) {
+          audioSender.replaceTrack(audioTrack);
+        } else {
+          this.peerConnection.addTrack(audioTrack, this.localStream);
+        }
+      }
+
+      this.updateMicUI(true);
+      this.startAudioMeter(this.localStream);
+
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'mic_status', micOn: true }));
+      }
+
+      return true;
+    } catch (err) {
+      console.warn('Microphone unlock error:', err);
+      this.updateMicUI(false, err.name === 'NotAllowedError' ? 'Mic Blocked' : 'Mic Off');
+      if (forcePrompt) {
+        alert('Microphone Blocked by Browser!\n\nPlease click the lock / permissions icon 🔒 in your browser address bar, set Microphone to "Allow", and try again.');
+      }
+      return false;
+    }
+  }
+
+  startAudioMeter(stream) {
+    try {
+      const audioTrack = stream.getAudioTracks()[0];
+      if (!audioTrack) return;
+
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!this.audioContext || this.audioContext.state === 'closed') {
+        this.audioContext = new AudioCtx();
+      }
+      if (this.audioContext.state === 'suspended') {
+        this.audioContext.resume().catch(() => {});
+      }
+
+      const source = this.audioContext.createMediaStreamSource(new MediaStream([audioTrack]));
+      const analyser = this.audioContext.createAnalyser();
+      analyser.fftSize = 64;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const meterBar = document.getElementById('mic-meter-bar');
+      const meterFill = document.getElementById('mic-meter-fill');
+      if (meterBar) meterBar.classList.remove('hidden');
+
+      if (this.audioMeterTimer) clearInterval(this.audioMeterTimer);
+      this.audioMeterTimer = setInterval(() => {
+        if (!this.micOn || !this.localStream || this.localStream.getAudioTracks().length === 0) {
+          if (meterFill) meterFill.style.width = '0%';
+          return;
+        }
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+        const avg = sum / dataArray.length;
+        const percent = Math.min(100, Math.round((avg / 128) * 100));
+        if (meterFill) {
+          meterFill.style.width = percent + '%';
+          if (percent > 15) {
+            meterFill.className = 'h-full bg-emerald-400 transition-all duration-75 block';
+          } else {
+            meterFill.className = 'h-full bg-slate-600 transition-all duration-75 block';
+          }
+        }
+      }, 100);
+    } catch (e) {
+      console.warn('Audio meter initialization notice:', e);
+    }
+  }
+
+  async toggleMic() {
+    const audioTracks = this.localStream ? this.localStream.getAudioTracks() : [];
+    if (audioTracks.length === 0) {
+      // Actively prompt to unlock mic!
+      await this.unlockMicrophone(true);
+      return;
+    }
+
+    this.micOn = !this.micOn;
+    audioTracks.forEach(t => t.enabled = this.micOn);
+    this.updateMicUI(this.micOn);
+
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'mic_status', micOn: this.micOn }));
+    }
   }
 
   toggleCam() {
@@ -1278,31 +1469,58 @@ class PeerPlatformManager {
       };
       this.peerConnection = new RTCPeerConnection(config);
 
-      // Add local media tracks if real camera/mic is active
-      if (this.localStream) {
-        this.localStream.getTracks().forEach(track => {
-          this.peerConnection.addTrack(track, this.localStream);
-        });
+      // Ensure BOTH audio and video are negotiated even if only one is active locally
+      const audioTracks = this.localStream ? this.localStream.getAudioTracks() : [];
+      const videoTracks = this.localStream ? this.localStream.getVideoTracks() : [];
+
+      if (audioTracks.length > 0) {
+        this.peerConnection.addTrack(audioTracks[0], this.localStream);
       } else {
-        // Explicitly add recvonly transceivers so SDP includes video/audio media lines
-        try {
-          this.peerConnection.addTransceiver('video', { direction: 'recvonly' });
-          this.peerConnection.addTransceiver('audio', { direction: 'recvonly' });
-        } catch (e) {}
+        try { this.peerConnection.addTransceiver('audio', { direction: 'recvonly' }); } catch (e) {}
       }
 
-      // When remote friend stream arrives, attach directly to remote video!
+      if (videoTracks.length > 0) {
+        this.peerConnection.addTrack(videoTracks[0], this.localStream);
+      } else {
+        try { this.peerConnection.addTransceiver('video', { direction: 'recvonly' }); } catch (e) {}
+      }
+
+      // When remote friend stream arrives, attach directly to remote audio and video!
       this.peerConnection.ontrack = (event) => {
         const remoteVid = document.getElementById('peer-remote-video');
+        const remoteAudio = document.getElementById('peer-remote-audio');
         const remoteImg = document.getElementById('peer-remote-stream-img');
         const remoteBox = document.getElementById('peer-remote-avatar-box');
         const liveInd = document.getElementById('remote-live-indicator');
-        if (remoteVid && event.streams && event.streams[0]) {
-          remoteVid.srcObject = event.streams[0];
-          remoteVid.classList.remove('hidden');
-          if (remoteImg) remoteImg.classList.add('hidden');
-          if (remoteBox) remoteBox.classList.add('hidden');
-          if (liveInd) liveInd.classList.remove('hidden');
+        const remoteStatus = document.getElementById('remote-peer-status');
+
+        // 1. Process Remote Audio
+        if (event.track.kind === 'audio' || (event.streams && event.streams[0] && event.streams[0].getAudioTracks().length > 0)) {
+          const aStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+          if (remoteAudio) {
+            remoteAudio.srcObject = aStream;
+            remoteAudio.play().catch(() => {
+              const unblockAudio = () => {
+                remoteAudio.play().catch(() => {});
+                document.removeEventListener('click', unblockAudio);
+              };
+              document.addEventListener('click', unblockAudio, { once: true });
+            });
+          }
+          if (remoteStatus) remoteStatus.textContent = '🎙️ Peer Audio Active';
+        }
+
+        // 2. Process Remote Video
+        if (event.track.kind === 'video' || (event.streams && event.streams[0] && event.streams[0].getVideoTracks().length > 0)) {
+          const vStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
+          if (remoteVid) {
+            remoteVid.srcObject = vStream;
+            remoteVid.classList.remove('hidden');
+            remoteVid.play().catch(() => {});
+            if (remoteImg) remoteImg.classList.add('hidden');
+            if (remoteBox) remoteBox.classList.add('hidden');
+            if (liveInd) liveInd.classList.remove('hidden');
+          }
         }
       };
 
@@ -1491,6 +1709,11 @@ class PeerPlatformManager {
     if (this.aiPartnerTimer) clearTimeout(this.aiPartnerTimer);
     if (this.frameBroadcastTimer) clearInterval(this.frameBroadcastTimer);
     if (this.framePollTimer) clearInterval(this.framePollTimer);
+    if (this.audioMeterTimer) clearInterval(this.audioMeterTimer);
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      try { this.audioContext.close(); } catch (e) {}
+      this.audioContext = null;
+    }
     if (this.ws) {
       try { this.ws.close(); } catch (e) {}
       this.ws = null;

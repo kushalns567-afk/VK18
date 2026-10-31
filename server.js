@@ -1072,6 +1072,16 @@ function handlePeerWsMessage(roomId, client, data) {
       }, client.peerId);
       break;
 
+    case 'mic_status':
+      const targetPeer = (room.peers || []).find(x => x.id === client.peerId);
+      if (targetPeer) targetPeer.micOn = !!data.micOn;
+      broadcastToRoom(roomId, {
+        type: 'mic_status',
+        fromPeerId: client.peerId,
+        micOn: !!data.micOn
+      }, client.peerId);
+      break;
+
     case 'peer_run':
       broadcastToRoom(roomId, {
         type: 'peer_run',
