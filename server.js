@@ -894,6 +894,45 @@ const server = http.createServer((req, res) => {
         return;
       }
 
+      // Live Audio Packet Relay (HTTP fallback guaranteeing audio transfer across all networks)
+      if (pathname === '/api/peer/voice' && req.method === 'POST') {
+        const { roomId, peerId, sampleRate, pcm } = data;
+        const room = peerRooms[roomId];
+        if (room && peerId && pcm) {
+          if (!room.voicePackets) room.voicePackets = {};
+          if (!room.voicePackets[peerId]) room.voicePackets[peerId] = [];
+          room.voicePackets[peerId].push({
+            id: 'v_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            sampleRate: sampleRate || 44100,
+            pcm: pcm,
+            timestamp: Date.now()
+          });
+          if (room.voicePackets[peerId].length > 15) room.voicePackets[peerId].shift();
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success' }));
+        return;
+      }
+
+      if (pathname === '/api/peer/voices' && req.method === 'GET') {
+        const roomId = parsedUrl.query.roomId;
+        const peerId = parsedUrl.query.peerId;
+        const room = peerRooms[roomId];
+        let packets = [];
+        if (room && room.voicePackets) {
+          const now = Date.now();
+          for (const [pId, pList] of Object.entries(room.voicePackets)) {
+            if (pId !== peerId) {
+              const recent = pList.filter(p => (now - p.timestamp) < 3000);
+              packets.push(...recent);
+            }
+          }
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'success', packets }));
+        return;
+      }
+
       // 5. Health check
       if (pathname === '/api/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -697,6 +697,7 @@ class PeerPlatformManager {
     // Start Real-Time Live Video Broadcaster & Receiver Loops
     this.startFrameBroadcaster();
     this.startFrameReceiver();
+    this.startVoicePoller();
 
     // Connect Instant Keystroke & State WebSocket
     this.initWebSocket();
@@ -899,27 +900,37 @@ class PeerPlatformManager {
       for (let i = 0; i < len; i++) {
         bytes[i] = binary.charCodeAt(i);
       }
-      const int16 = new Int16Array(bytes.buffer);
-      const float32 = new Float32Array(int16.length);
-      for (let i = 0; i < int16.length; i++) {
-        float32[i] = int16[i] / 32768;
+
+      const sampleCount = Math.floor(len / 2);
+      if (sampleCount === 0) return;
+      const dataView = new DataView(bytes.buffer, bytes.byteOffset, sampleCount * 2);
+      const float32 = new Float32Array(sampleCount);
+      for (let i = 0; i < sampleCount; i++) {
+        float32[i] = dataView.getInt16(i * 2, true) / 32768;
       }
 
-      const audioBuffer = this.remotePcmCtx.createBuffer(1, float32.length, sampleRate || 44100);
+      const audioBuffer = this.remotePcmCtx.createBuffer(1, sampleCount, sampleRate || 44100);
       audioBuffer.getChannelData(0).set(float32);
 
       const source = this.remotePcmCtx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(this.remotePcmCtx.destination);
 
-      const currentTime = this.remotePcmCtx.currentTime;
-      if (!this.nextPlayTime || this.nextPlayTime < currentTime) {
-        this.nextPlayTime = currentTime + 0.02;
+      const gain = this.remotePcmCtx.createGain();
+      gain.gain.value = 2.0; // Voice amplification
+      source.connect(gain);
+      gain.connect(this.remotePcmCtx.destination);
+
+      const curTime = this.remotePcmCtx.currentTime;
+      if (!this.nextPlayTime || this.nextPlayTime < curTime) {
+        this.nextPlayTime = curTime + 0.01;
       }
       source.start(this.nextPlayTime);
       this.nextPlayTime += audioBuffer.duration;
+
+      const remoteStatus = document.getElementById('remote-peer-status');
+      if (remoteStatus) remoteStatus.textContent = '🎙️ Peer Speaking...';
     } catch (err) {
-      console.warn('PCM playback notice:', err);
+      console.warn('PCM playback error:', err);
     }
   }
 
@@ -1019,9 +1030,11 @@ class PeerPlatformManager {
 
     // Unblock browser autoplay on any window click
     window.addEventListener('click', () => {
-      if (this.remotePcmCtx && this.remotePcmCtx.state === 'suspended') {
-        this.remotePcmCtx.resume().catch(() => {});
-      }
+      [this.pcmAudioCtx, this.remotePcmCtx, this.audioContext, this.remoteWebRtcCtx].forEach(ctx => {
+        if (ctx && ctx.state === 'suspended') {
+          ctx.resume().catch(() => {});
+        }
+      });
       const remoteAudio = document.getElementById('peer-remote-audio');
       if (remoteAudio && remoteAudio.paused && remoteAudio.srcObject) {
         remoteAudio.play().catch(() => {});
@@ -1416,12 +1429,16 @@ class PeerPlatformManager {
       if (!AudioContextClass) return;
 
       this.pcmAudioCtx = new AudioContextClass();
+      if (this.pcmAudioCtx.state === 'suspended') {
+        this.pcmAudioCtx.resume().catch(() => {});
+      }
+
       const source = this.pcmAudioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
       const bufferSize = 4096;
       this.pcmProcessor = this.pcmAudioCtx.createScriptProcessor(bufferSize, 1, 1);
 
       this.pcmProcessor.onaudioprocess = (e) => {
-        if (!this.micOn || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (!this.micOn) return;
         const inputData = e.inputBuffer.getChannelData(0);
 
         let maxVal = 0;
@@ -1429,7 +1446,7 @@ class PeerPlatformManager {
           const abs = Math.abs(inputData[i]);
           if (abs > maxVal) maxVal = abs;
         }
-        if (maxVal < 0.015) return; // Skip silence to preserve bandwidth
+        if (maxVal < 0.005) return; // Sensitive voice threshold (captures whisper & normal speech)
 
         const int16Array = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
@@ -1437,19 +1454,34 @@ class PeerPlatformManager {
           int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
         }
 
-        const bytes = new Uint8Array(int16Array.buffer);
+        const uint8 = new Uint8Array(int16Array.buffer);
         let binary = '';
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
+        const chunk = 1024;
+        for (let i = 0; i < uint8.length; i += chunk) {
+          binary += String.fromCharCode.apply(null, uint8.subarray(i, i + chunk));
         }
         const b64 = btoa(binary);
 
-        this.ws.send(JSON.stringify({
-          type: 'pcm_voice',
-          sampleRate: this.pcmAudioCtx.sampleRate,
-          pcm: b64
-        }));
+        // 1. Send via WebSocket (<10ms)
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({
+            type: 'pcm_voice',
+            sampleRate: this.pcmAudioCtx.sampleRate,
+            pcm: b64
+          }));
+        }
+
+        // 2. HTTP Fallback Relay
+        fetch('/api/peer/voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId: this.currentRoom,
+            peerId: this.peerId,
+            sampleRate: this.pcmAudioCtx.sampleRate,
+            pcm: b64
+          })
+        }).catch(() => {});
       };
 
       source.connect(this.pcmProcessor);
@@ -1889,6 +1921,31 @@ class PeerPlatformManager {
     }, 150);
   }
 
+  startVoicePoller() {
+    if (this.voicePollTimer) clearInterval(this.voicePollTimer);
+    if (!this.playedVoicePacketIds) this.playedVoicePacketIds = new Set();
+
+    this.voicePollTimer = setInterval(async () => {
+      if (!this.currentRoom) return;
+      try {
+        const res = await fetch(`/api/peer/voices?roomId=${encodeURIComponent(this.currentRoom)}&peerId=${encodeURIComponent(this.peerId)}`);
+        const data = await res.json();
+        if (data.status === 'success' && data.packets && data.packets.length) {
+          for (const pkt of data.packets) {
+            if (!this.playedVoicePacketIds.has(pkt.id)) {
+              this.playedVoicePacketIds.add(pkt.id);
+              if (this.playedVoicePacketIds.size > 200) {
+                const arr = Array.from(this.playedVoicePacketIds);
+                this.playedVoicePacketIds = new Set(arr.slice(100));
+              }
+              this.playPcmVoice(pkt.sampleRate, pkt.pcm);
+            }
+          }
+        }
+      } catch (e) {}
+    }, 200);
+  }
+
   // ── WEBRTC P2P SIGNALING & VIDEO STREAMING ─────────────────────────────────
   async handlePeerWebRTC(remotePeerId) {
     if (this.peerConnection) return; // already negotiating or connected
@@ -2216,6 +2273,7 @@ class PeerPlatformManager {
     if (this.aiPartnerTimer) clearTimeout(this.aiPartnerTimer);
     if (this.frameBroadcastTimer) clearInterval(this.frameBroadcastTimer);
     if (this.framePollTimer) clearInterval(this.framePollTimer);
+    if (this.voicePollTimer) clearInterval(this.voicePollTimer);
     if (this.audioMeterTimer) clearInterval(this.audioMeterTimer);
     if (this.audioContext && this.audioContext.state !== 'closed') {
       try { this.audioContext.close(); } catch (e) {}
