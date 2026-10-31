@@ -675,13 +675,23 @@ class PeerPlatformManager {
       }
     }
 
-    // Initialize microphone status and activity volume meter
+    // Initialize microphone status and activity volume meter - Auto-enable by default!
     const hasAudioTrack = this.localStream && this.localStream.getAudioTracks().length > 0;
-    this.updateMicUI(hasAudioTrack);
     if (hasAudioTrack) {
+      this.localStream.getAudioTracks().forEach(t => t.enabled = true);
+      this.updateMicUI(true);
       this.startAudioMeter(this.localStream);
       this.startVoiceBroadcast(this.localStream);
       this.startPcmBroadcaster(this.localStream);
+    } else {
+      this.updateMicUI(false);
+      // Attempt immediate unlock so user does not stay muted
+      this.unlockMicrophone(false).then(ok => {
+        if (ok && this.localStream) {
+          this.localStream.getAudioTracks().forEach(t => t.enabled = true);
+          this.updateMicUI(true);
+        }
+      }).catch(() => {});
     }
 
     // Start Real-Time Live Video Broadcaster & Receiver Loops
@@ -1075,6 +1085,7 @@ class PeerPlatformManager {
 
   // ── MICROPHONE UNLOCK, VOLUME METER & MEDIA TOGGLES ──────────────────────
   updateMicUI(isActive, customLabel = null) {
+    const btn = document.getElementById('btn-toggle-mic');
     const icon = document.getElementById('mic-icon');
     const badge = document.getElementById('local-mic-badge');
     const statusText = document.getElementById('mic-text-status');
@@ -1082,20 +1093,28 @@ class PeerPlatformManager {
     const meterBar = document.getElementById('mic-meter-bar');
 
     if (isActive) {
+      this.micOn = true;
+      if (btn) {
+        btn.className = 'px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-900/40';
+      }
       if (icon) icon.textContent = '🎙️';
-      if (statusText) statusText.textContent = 'Mute';
+      if (statusText) statusText.textContent = 'Mic: ON (Live)';
       if (badge) {
-        badge.textContent = '🎙️ Mic Active';
+        badge.textContent = '🎙️ Mic Active & Streaming';
         badge.className = 'text-[10px] text-emerald-400 font-bold';
       }
       if (unlockBtn) unlockBtn.classList.add('hidden');
       if (meterBar) meterBar.classList.remove('hidden');
     } else {
+      this.micOn = false;
+      if (btn) {
+        btn.className = 'px-3 py-1.5 rounded-lg bg-red-600/90 hover:bg-red-600 text-white font-bold transition flex items-center gap-1.5 border border-red-500 animate-pulse';
+      }
       if (icon) icon.textContent = '🔇';
-      if (statusText) statusText.textContent = 'Unmute';
+      if (statusText) statusText.textContent = 'Mic: MUTED (Click to Speak)';
       if (badge) {
         badge.textContent = customLabel ? `⚠️ ${customLabel}` : '🔇 Mic Muted';
-        badge.className = 'text-[10px] text-amber-400 font-bold';
+        badge.className = 'text-[10px] text-red-400 font-bold';
       }
       if (unlockBtn) unlockBtn.classList.remove('hidden');
       if (meterBar) meterBar.classList.add('hidden');
@@ -1454,6 +1473,12 @@ class PeerPlatformManager {
     this.micOn = !this.micOn;
     audioTracks.forEach(t => t.enabled = this.micOn);
     this.updateMicUI(this.micOn);
+
+    if (this.micOn) {
+      this.startVoiceBroadcast(this.localStream);
+      this.startPcmBroadcaster(this.localStream);
+      this.startAudioMeter(this.localStream);
+    }
 
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'mic_status', micOn: this.micOn }));
@@ -1926,6 +1951,7 @@ class PeerPlatformManager {
           const aStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
           if (remoteAudio) {
             remoteAudio.srcObject = aStream;
+            remoteAudio.volume = 1.0;
             remoteAudio.play().catch(() => {
               const banner = document.getElementById('audio-autoplay-banner');
               if (banner) banner.classList.remove('hidden');
@@ -1937,6 +1963,28 @@ class PeerPlatformManager {
               document.addEventListener('click', unblockAudio, { once: true });
             });
           }
+
+          // Direct Web Audio API pipeline for amplified, glitch-free speaker output
+          try {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (!this.remoteWebRtcCtx || this.remoteWebRtcCtx.state === 'closed') {
+              this.remoteWebRtcCtx = new AudioCtx();
+            }
+            if (this.remoteWebRtcCtx.state === 'suspended') {
+              this.remoteWebRtcCtx.resume().catch(() => {});
+            }
+            if (this.remoteAudioSourceNode) {
+              try { this.remoteAudioSourceNode.disconnect(); } catch (e) {}
+            }
+            this.remoteAudioSourceNode = this.remoteWebRtcCtx.createMediaStreamSource(aStream);
+            const gainNode = this.remoteWebRtcCtx.createGain();
+            gainNode.gain.value = 1.5; // Clear voice boost
+            this.remoteAudioSourceNode.connect(gainNode);
+            gainNode.connect(this.remoteWebRtcCtx.destination);
+          } catch (audioCtxErr) {
+            console.warn('Web Audio direct output notice:', audioCtxErr);
+          }
+
           if (remoteStatus) remoteStatus.textContent = '🎙️ Peer Audio Active';
         }
 
@@ -1945,6 +1993,7 @@ class PeerPlatformManager {
           const vStream = (event.streams && event.streams[0]) ? event.streams[0] : new MediaStream([event.track]);
           if (remoteVid) {
             remoteVid.srcObject = vStream;
+            remoteVid.muted = true; // Essential: must be muted to prevent Chrome autoplay blocks
             remoteVid.classList.remove('hidden');
             remoteVid.play().catch(() => {});
             if (remoteImg) remoteImg.classList.add('hidden');
