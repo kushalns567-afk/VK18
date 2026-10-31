@@ -652,6 +652,8 @@ class PeerPlatformManager {
     this.updateMicUI(hasAudioTrack);
     if (hasAudioTrack) {
       this.startAudioMeter(this.localStream);
+      this.startVoiceBroadcast(this.localStream);
+      this.startPcmBroadcaster(this.localStream);
     }
 
     // Start Real-Time Live Video Broadcaster & Receiver Loops
@@ -795,6 +797,15 @@ class PeerPlatformManager {
         }
         break;
       }
+
+      case 'pcm_voice': {
+        if (data.pcm) {
+          const remoteStatus = document.getElementById('remote-peer-status');
+          if (remoteStatus) remoteStatus.textContent = '🎙️ Peer Speaking...';
+          this.playPcmVoice(data.sampleRate, data.pcm);
+        }
+        break;
+      }
     }
   }
 
@@ -829,6 +840,49 @@ class PeerPlatformManager {
       if (banner) banner.classList.remove('hidden');
       this.playNextVoicePacket();
     });
+  }
+
+  playPcmVoice(sampleRate, b64Data) {
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      if (!this.remotePcmCtx || this.remotePcmCtx.state === 'closed') {
+        this.remotePcmCtx = new AudioContextClass();
+        this.nextPlayTime = 0;
+      }
+      if (this.remotePcmCtx.state === 'suspended') {
+        this.remotePcmCtx.resume().catch(() => {});
+      }
+
+      const binary = atob(b64Data);
+      const len = binary.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binary.charCodeAt(i);
+      }
+      const int16 = new Int16Array(bytes.buffer);
+      const float32 = new Float32Array(int16.length);
+      for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768;
+      }
+
+      const audioBuffer = this.remotePcmCtx.createBuffer(1, float32.length, sampleRate || 44100);
+      audioBuffer.getChannelData(0).set(float32);
+
+      const source = this.remotePcmCtx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(this.remotePcmCtx.destination);
+
+      const currentTime = this.remotePcmCtx.currentTime;
+      if (!this.nextPlayTime || this.nextPlayTime < currentTime) {
+        this.nextPlayTime = currentTime + 0.02;
+      }
+      source.start(this.nextPlayTime);
+      this.nextPlayTime += audioBuffer.duration;
+    } catch (err) {
+      console.warn('PCM playback notice:', err);
+    }
   }
 
   // ── ATTACH ACTIVE ROOM EVENTS ──────────────────────────────────────────────
@@ -1017,20 +1071,34 @@ class PeerPlatformManager {
         this.localStream.addTrack(audioTrack);
       }
 
-      // Upgrade active WebRTC senders
+      // Upgrade active WebRTC senders and transceivers
       if (this.peerConnection) {
-        const senders = this.peerConnection.getSenders ? this.peerConnection.getSenders() : [];
-        const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
-        if (audioSender) {
-          audioSender.replaceTrack(audioTrack);
+        const transceivers = this.peerConnection.getTransceivers ? this.peerConnection.getTransceivers() : [];
+        const audioTransceiver = transceivers.find(t => 
+          (t.receiver && t.receiver.track && t.receiver.track.kind === 'audio') ||
+          (t.sender && t.sender.track && t.sender.track.kind === 'audio')
+        );
+        if (audioTransceiver) {
+          audioTransceiver.direction = 'sendrecv';
+          if (audioTransceiver.sender) {
+            audioTransceiver.sender.replaceTrack(audioTrack);
+          }
         } else {
-          this.peerConnection.addTrack(audioTrack, this.localStream);
+          const senders = this.peerConnection.getSenders ? this.peerConnection.getSenders() : [];
+          const audioSender = senders.find(s => s.track && s.track.kind === 'audio');
+          if (audioSender) {
+            audioSender.replaceTrack(audioTrack);
+          } else {
+            this.peerConnection.addTrack(audioTrack, this.localStream);
+          }
         }
+        this.renegotiateWebRTC();
       }
 
       this.updateMicUI(true);
       this.startAudioMeter(this.localStream);
       this.startVoiceBroadcast(this.localStream);
+      this.startPcmBroadcaster(this.localStream);
 
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'mic_status', micOn: true }));
@@ -1135,6 +1203,70 @@ class PeerPlatformManager {
       this.voiceRecorder.start(250); // 250ms voice chunks
     } catch (err) {
       console.warn('Voice packet broadcaster notice:', err);
+    }
+  }
+
+  startPcmBroadcaster(stream) {
+    if (this.pcmProcessor) {
+      try { this.pcmProcessor.disconnect(); } catch (e) {}
+      this.pcmProcessor = null;
+    }
+    if (this.pcmAudioCtx && this.pcmAudioCtx.state !== 'closed') {
+      try { this.pcmAudioCtx.close(); } catch (e) {}
+      this.pcmAudioCtx = null;
+    }
+
+    try {
+      const audioTrack = stream ? stream.getAudioTracks()[0] : null;
+      if (!audioTrack) return;
+
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      this.pcmAudioCtx = new AudioContextClass();
+      const source = this.pcmAudioCtx.createMediaStreamSource(new MediaStream([audioTrack]));
+      const bufferSize = 4096;
+      this.pcmProcessor = this.pcmAudioCtx.createScriptProcessor(bufferSize, 1, 1);
+
+      this.pcmProcessor.onaudioprocess = (e) => {
+        if (!this.micOn || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        const inputData = e.inputBuffer.getChannelData(0);
+
+        let maxVal = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          const abs = Math.abs(inputData[i]);
+          if (abs > maxVal) maxVal = abs;
+        }
+        if (maxVal < 0.015) return; // Skip silence to preserve bandwidth
+
+        const int16Array = new Int16Array(inputData.length);
+        for (let i = 0; i < inputData.length; i++) {
+          const s = Math.max(-1, Math.min(1, inputData[i]));
+          int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+
+        const bytes = new Uint8Array(int16Array.buffer);
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const b64 = btoa(binary);
+
+        this.ws.send(JSON.stringify({
+          type: 'pcm_voice',
+          sampleRate: this.pcmAudioCtx.sampleRate,
+          pcm: b64
+        }));
+      };
+
+      source.connect(this.pcmProcessor);
+      const silentGain = this.pcmAudioCtx.createGain();
+      silentGain.gain.value = 0;
+      this.pcmProcessor.connect(silentGain);
+      silentGain.connect(this.pcmAudioCtx.destination);
+    } catch (err) {
+      console.warn('PCM broadcaster setup notice:', err);
     }
   }
 
@@ -1562,6 +1694,7 @@ class PeerPlatformManager {
   // ── WEBRTC P2P SIGNALING & VIDEO STREAMING ─────────────────────────────────
   async handlePeerWebRTC(remotePeerId) {
     if (this.peerConnection) return; // already negotiating or connected
+    this.currentRemotePeerId = remotePeerId;
 
     try {
       this.remoteCandidateQueue = [];
@@ -1597,13 +1730,13 @@ class PeerPlatformManager {
       if (audioTracks.length > 0) {
         this.peerConnection.addTrack(audioTracks[0], this.localStream);
       } else {
-        try { this.peerConnection.addTransceiver('audio', { direction: 'recvonly' }); } catch (e) {}
+        try { this.peerConnection.addTransceiver('audio', { direction: 'sendrecv' }); } catch (e) {}
       }
 
       if (videoTracks.length > 0) {
         this.peerConnection.addTrack(videoTracks[0], this.localStream);
       } else {
-        try { this.peerConnection.addTransceiver('video', { direction: 'recvonly' }); } catch (e) {}
+        try { this.peerConnection.addTransceiver('video', { direction: 'sendrecv' }); } catch (e) {}
       }
 
       // When remote friend stream arrives, attach directly to remote audio and video!
@@ -1768,6 +1901,34 @@ class PeerPlatformManager {
         }
       } catch (e) {}
     }, 1000);
+  }
+
+  async renegotiateWebRTC() {
+    if (!this.peerConnection || !this.currentRemotePeerId) return;
+    try {
+      const offer = await this.peerConnection.createOffer();
+      await this.peerConnection.setLocalDescription(offer);
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'webrtc_signal',
+          toPeerId: this.currentRemotePeerId,
+          signal: { type: 'offer', sdp: offer.sdp }
+        }));
+      } else {
+        fetch('/api/peer/signal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            roomId: this.currentRoom,
+            fromPeerId: this.peerId,
+            toPeerId: this.currentRemotePeerId,
+            signal: { type: 'offer', sdp: offer.sdp }
+          })
+        }).catch(() => {});
+      }
+    } catch (e) {
+      console.warn('WebRTC renegotiation notice:', e);
+    }
   }
 
   // ── AI PEER PARTNER (Ensures instant peer connection even when testing solo)

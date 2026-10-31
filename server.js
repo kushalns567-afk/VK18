@@ -1090,6 +1090,15 @@ function handlePeerWsMessage(roomId, client, data) {
       }, client.peerId);
       break;
 
+    case 'pcm_voice':
+      broadcastToRoom(roomId, {
+        type: 'pcm_voice',
+        fromPeerId: client.peerId,
+        sampleRate: data.sampleRate,
+        pcm: data.pcm
+      }, client.peerId);
+      break;
+
     case 'peer_run':
       broadcastToRoom(roomId, {
         type: 'peer_run',
